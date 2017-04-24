@@ -31,6 +31,9 @@ public class PushConsumer {
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("CID_JODIE_1");
         consumer.subscribe("Jodie_topic_1023", "*");
         consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
+
+        consumer.setConsumeTimestamp("2017_0422_235500");
+
         consumer.registerMessageListener(new MessageListenerConcurrently() {
 
             /**
