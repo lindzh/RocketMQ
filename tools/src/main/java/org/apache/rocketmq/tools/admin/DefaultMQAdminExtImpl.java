@@ -51,6 +51,7 @@ import org.apache.rocketmq.common.constant.GroupType;
 import org.apache.rocketmq.common.downgrade.DowngradeConfig;
 import org.apache.rocketmq.common.downgrade.DowngradeUtils;
 import org.apache.rocketmq.common.help.FAQUrl;
+import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.message.MessageClientExt;
 import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageDecoder;
@@ -89,10 +90,9 @@ import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.tools.admin.api.MessageTrack;
 import org.apache.rocketmq.tools.admin.api.TrackType;
-import org.slf4j.Logger;
 
 public class DefaultMQAdminExtImpl implements MQAdminExt, MQAdminExtInner {
-    private final Logger log = ClientLogger.getLog();
+    private final InternalLogger log = ClientLogger.getLog();
     private final DefaultMQAdminExt defaultMQAdminExt;
     private ServiceState serviceState = ServiceState.CREATE_JUST;
     private MQClientInstance mqClientInstance;
