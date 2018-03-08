@@ -26,10 +26,13 @@ import org.apache.rocketmq.client.QueryResult;
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.admin.ConsumeStats;
 import org.apache.rocketmq.common.admin.RollbackStats;
 import org.apache.rocketmq.common.admin.TopicStatsTable;
+import org.apache.rocketmq.common.constant.GroupType;
+import org.apache.rocketmq.common.downgrade.DowngradeConfig;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.body.BrokerStatsData;
@@ -44,6 +47,7 @@ import org.apache.rocketmq.common.protocol.body.ProducerConnection;
 import org.apache.rocketmq.common.protocol.body.QueryConsumeQueueResponseBody;
 import org.apache.rocketmq.common.protocol.body.QueueTimeSpan;
 import org.apache.rocketmq.common.protocol.body.SubscriptionGroupWrapper;
+import org.apache.rocketmq.common.protocol.body.TimedKVTable;
 import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
 import org.apache.rocketmq.common.protocol.body.TopicList;
 import org.apache.rocketmq.common.protocol.route.TopicRouteData;
@@ -512,5 +516,40 @@ public class DefaultMQAdminExt extends ClientConfig implements MQAdminExt {
         return this.defaultMQAdminExtImpl.queryConsumeQueue(
             brokerAddr, topic, queueId, index, count, consumerGroup
         );
+    }
+
+    @Override
+    public void deleteTimedKVConfig(String namespace, String key) throws RemotingException, MQClientException, InterruptedException {
+        this.defaultMQAdminExtImpl.deleteTimedKVConfig(namespace, key);
+    }
+
+    @Override
+    public void putTimedKVConfig(String namespace, String key, TimedConfig config) throws RemotingException,
+        MQClientException, InterruptedException {
+        this.defaultMQAdminExtImpl.putTimedKVConfig(namespace, key, config);
+    }
+
+    @Override
+    public TimedConfig getTimedKVConfig(String namespace, String key) throws RemotingException, MQClientException,
+        InterruptedException {
+        return this.defaultMQAdminExtImpl.getTimedKVConfig(namespace, key);
+    }
+
+    @Override
+    public TimedKVTable getTimedKVListByNamespace(String namespace) throws RemotingException, MQClientException,
+        InterruptedException {
+        return this.defaultMQAdminExtImpl.getTimedKVListByNamespace(namespace);
+    }
+
+    @Override
+    public DowngradeConfig getDowngradeConfig(GroupType groupType, String group, String topic) throws RemotingException,
+        MQClientException, InterruptedException {
+        return this.defaultMQAdminExtImpl.getDowngradeConfig(groupType, group, topic);
+    }
+
+    @Override
+    public void updateDowngradeConfig(GroupType groupType, String group, String topic, DowngradeConfig downgradeConfig)
+        throws RemotingException, MQClientException, InterruptedException {
+        this.defaultMQAdminExtImpl.updateDowngradeConfig(groupType, group, topic, downgradeConfig);
     }
 }

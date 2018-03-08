@@ -82,6 +82,15 @@ public class RequestCode {
     public static final int GET_ROUTEINTO_BY_TOPIC = 105;
 
     public static final int GET_BROKER_CLUSTER_INFO = 106;
+
+    public static final int PUT_TIMEDKV_CONFIG = 130;
+
+    public static final int GET_TIMEDKV_CONFIG = 131;
+
+    public static final int DELETE_TIMEDKV_CONFIG = 132;
+
+    public static final int GET_TIMEDKVLIST_BY_NAMESPACE = 133;
+
     public static final int UPDATE_AND_CREATE_SUBSCRIPTIONGROUP = 200;
     public static final int GET_ALL_SUBSCRIPTIONGROUP_CONFIG = 201;
     public static final int GET_TOPIC_STATS_INFO = 202;

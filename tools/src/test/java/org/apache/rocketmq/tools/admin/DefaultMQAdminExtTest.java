@@ -34,11 +34,15 @@ import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.impl.MQClientAPIImpl;
 import org.apache.rocketmq.client.impl.MQClientManager;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
+import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.admin.ConsumeStats;
 import org.apache.rocketmq.common.admin.OffsetWrapper;
 import org.apache.rocketmq.common.admin.TopicOffset;
 import org.apache.rocketmq.common.admin.TopicStatsTable;
+import org.apache.rocketmq.common.constant.GroupType;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
+import org.apache.rocketmq.common.downgrade.DowngradeConfig;
+import org.apache.rocketmq.common.downgrade.DowngradeUtils;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.namesrv.NamesrvUtil;
@@ -54,6 +58,7 @@ import org.apache.rocketmq.common.protocol.body.ProcessQueueInfo;
 import org.apache.rocketmq.common.protocol.body.ProducerConnection;
 import org.apache.rocketmq.common.protocol.body.QueueTimeSpan;
 import org.apache.rocketmq.common.protocol.body.SubscriptionGroupWrapper;
+import org.apache.rocketmq.common.protocol.body.TimedKVTable;
 import org.apache.rocketmq.common.protocol.body.TopicList;
 import org.apache.rocketmq.common.protocol.heartbeat.ConsumeType;
 import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
@@ -68,6 +73,7 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.tools.admin.api.MessageTrack;
+import org.apache.rocketmq.tools.command.namesrv.BasicTimedKVTest;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -82,7 +88,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
-public class DefaultMQAdminExtTest {
+public class DefaultMQAdminExtTest extends BasicTimedKVTest {
     private static DefaultMQAdminExt defaultMQAdminExt;
     private static DefaultMQAdminExtImpl defaultMQAdminExtImpl;
     private static MQClientInstance mqClientInstance = MQClientManager.getInstance().getAndCreateMQClientInstance(new ClientConfig());
@@ -92,6 +98,10 @@ public class DefaultMQAdminExtTest {
     private static TopicRouteData topicRouteData = new TopicRouteData();
     private static KVTable kvTable = new KVTable();
     private static ClusterInfo clusterInfo = new ClusterInfo();
+
+    private static HashMap<String,Map<String,TimedConfig>> timedConfigHashMap = new HashMap<>();
+
+
 
     @BeforeClass
     public static void init() throws Exception {
@@ -225,6 +235,8 @@ public class DefaultMQAdminExtTest {
         consumerRunningInfo.setStatusTable(new TreeMap<String, ConsumeStatus>());
         consumerRunningInfo.setSubscriptionSet(new TreeSet<SubscriptionData>());
         when(mQClientAPIImpl.getConsumerRunningInfo(anyString(), anyString(), anyString(), anyBoolean(), anyLong())).thenReturn(consumerRunningInfo);
+
+        initTimedKV(mQClientAPIImpl);
     }
 
     @AfterClass
@@ -405,5 +417,52 @@ public class DefaultMQAdminExtTest {
         assertThat(subscriptionGroupWrapper.getSubscriptionGroupTable().get("Consumer-group-one").getBrokerId()).isEqualTo(1234);
         assertThat(subscriptionGroupWrapper.getSubscriptionGroupTable().get("Consumer-group-one").getGroupName()).isEqualTo("Consumer-group-one");
         assertThat(subscriptionGroupWrapper.getSubscriptionGroupTable().get("Consumer-group-one").isConsumeBroadcastEnable()).isTrue();
+    }
+
+    @Test
+    public void testTimedKV() throws RemotingException, MQClientException, InterruptedException {
+        String namespace = "timednamespace";
+        long sec10 = 1000 * 10;
+        defaultMQAdminExt.putTimedKVConfig(namespace, "key1", new TimedConfig("simple1", System.currentTimeMillis() + sec10));
+        defaultMQAdminExt.putTimedKVConfig(namespace, "key2", new TimedConfig("simple2", System.currentTimeMillis() + sec10));
+        defaultMQAdminExt.putTimedKVConfig(namespace, "key3", new TimedConfig("simple3", System.currentTimeMillis() + sec10));
+        defaultMQAdminExt.putTimedKVConfig(namespace, "key4", new TimedConfig("simple4", System.currentTimeMillis()));
+        defaultMQAdminExt.putTimedKVConfig(namespace, "key5", new TimedConfig("simple5", System.currentTimeMillis() + sec10));
+        TimedConfig timedKVConfig = defaultMQAdminExt.getTimedKVConfig(namespace, "key1");
+        assertThat(timedKVConfig.getValue()).isEqualTo("simple1");
+
+        TimedKVTable timedKVListByNamespace = defaultMQAdminExt.getTimedKVListByNamespace(namespace);
+        assertThat(timedKVListByNamespace.getTable().size()).isEqualTo(5);
+        defaultMQAdminExt.deleteTimedKVConfig(namespace, "key2");
+
+        timedKVListByNamespace = defaultMQAdminExt.getTimedKVListByNamespace(namespace);
+        assertThat(timedKVListByNamespace.getTable().size()).isEqualTo(4);
+
+        TimedConfig kvConfig = defaultMQAdminExt.getTimedKVConfig(namespace, "simple4");
+        assertThat(kvConfig).isNull();
+    }
+
+    @Test
+    public void testDowngrade() throws RemotingException, MQClientException, InterruptedException {
+        long maxTime = System.currentTimeMillis() + 10000;
+
+        DowngradeConfig downgradeConfig = new DowngradeConfig();
+        downgradeConfig.setDownTimeout(System.currentTimeMillis());
+        downgradeConfig.setTopic("simple");
+        downgradeConfig.setDowngradeEnable(true);
+
+        downgradeConfig.setHostDownTimeout(new HashMap<String, Long>());
+        downgradeConfig.getHostDownTimeout().put("host1", maxTime);
+        defaultMQAdminExt.updateDowngradeConfig(GroupType.PRODUCER, "sender1", "topic1", downgradeConfig);
+
+        String key = DowngradeUtils.genDowngradeKey(GroupType.PRODUCER, "sender1", "topic1");
+        TimedConfig timedKVConfig = defaultMQAdminExt.getTimedKVConfig(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, key);
+        assertThat(timedKVConfig.getValue()).contains("simple");
+        assertThat(timedKVConfig.getTimeout()).isEqualTo(maxTime);
+
+        DowngradeConfig downgradeConfig1 = defaultMQAdminExt.getDowngradeConfig(GroupType.PRODUCER, "sender1", "topic1");
+        assertThat(downgradeConfig.getHostDownTimeout().size()).isEqualTo(downgradeConfig1.getHostDownTimeout().size());
+        assertThat(downgradeConfig.getTopic()).isEqualTo(downgradeConfig1.getTopic());
+        assertThat(downgradeConfig.isDowngradeEnable()).isEqualTo(downgradeConfig1.isDowngradeEnable());
     }
 }

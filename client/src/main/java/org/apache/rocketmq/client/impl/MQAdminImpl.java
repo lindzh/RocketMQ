@@ -33,7 +33,11 @@ import org.apache.rocketmq.client.impl.factory.MQClientInstance;
 import org.apache.rocketmq.client.impl.producer.TopicPublishInfo;
 import org.apache.rocketmq.client.log.ClientLogger;
 import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.TopicConfig;
+import org.apache.rocketmq.common.constant.GroupType;
+import org.apache.rocketmq.common.downgrade.DowngradeConfig;
+import org.apache.rocketmq.common.downgrade.DowngradeUtils;
 import org.apache.rocketmq.common.help.FAQUrl;
 import org.apache.rocketmq.common.message.MessageClientIDSetter;
 import org.apache.rocketmq.common.message.MessageConst;
@@ -41,6 +45,7 @@ import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageId;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.common.namesrv.NamesrvUtil;
 import org.apache.rocketmq.common.protocol.ResponseCode;
 import org.apache.rocketmq.common.protocol.header.QueryMessageRequestHeader;
 import org.apache.rocketmq.common.protocol.header.QueryMessageResponseHeader;
@@ -416,5 +421,20 @@ public class MQAdminImpl {
         }
 
         throw new MQClientException(ResponseCode.TOPIC_NOT_EXIST, "The topic[" + topic + "] not matched route info");
+    }
+
+    public DowngradeConfig getDowngradeConfig(GroupType groupType, String group, String topic) throws RemotingException,
+        MQClientException, InterruptedException {
+        String key = DowngradeUtils.genDowngradeKey(groupType, group, topic);
+        TimedConfig timedConfig = this.mQClientFactory.getMQClientAPIImpl()
+            .getTimedKVConfigValue(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, key, timeoutMillis);
+        if (timedConfig != null) {
+            try {
+                return DowngradeUtils.fromTimedConfig(timedConfig);
+            } catch (Exception e) {
+                throw new MQClientException("Convert TimedConfig to DowngradeConfig error", e);
+            }
+        }
+        return null;
     }
 }

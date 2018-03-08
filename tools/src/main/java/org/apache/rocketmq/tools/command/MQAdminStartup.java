@@ -55,9 +55,13 @@ import org.apache.rocketmq.tools.command.message.QueryMsgByKeySubCommand;
 import org.apache.rocketmq.tools.command.message.QueryMsgByOffsetSubCommand;
 import org.apache.rocketmq.tools.command.message.QueryMsgByUniqueKeySubCommand;
 import org.apache.rocketmq.tools.command.namesrv.DeleteKvConfigCommand;
+import org.apache.rocketmq.tools.command.namesrv.DeleteTimedKvConfigCommand;
 import org.apache.rocketmq.tools.command.namesrv.GetNamesrvConfigCommand;
+import org.apache.rocketmq.tools.command.namesrv.GetTimedKvConfigCommand;
+import org.apache.rocketmq.tools.command.namesrv.UpdateClientDowngradeConfigCommand;
 import org.apache.rocketmq.tools.command.namesrv.UpdateKvConfigCommand;
 import org.apache.rocketmq.tools.command.namesrv.UpdateNamesrvConfigCommand;
+import org.apache.rocketmq.tools.command.namesrv.UpdateTimedKvConfigCommand;
 import org.apache.rocketmq.tools.command.namesrv.WipeWritePermSubCommand;
 import org.apache.rocketmq.tools.command.offset.CloneGroupOffsetCommand;
 import org.apache.rocketmq.tools.command.offset.ResetOffsetByTimeCommand;
@@ -193,6 +197,11 @@ public class MQAdminStartup {
         initCommand(new GetBrokerConfigCommand());
 
         initCommand(new QueryConsumeQueueCommand());
+
+        initCommand(new DeleteTimedKvConfigCommand());
+        initCommand(new GetTimedKvConfigCommand());
+        initCommand(new UpdateTimedKvConfigCommand());
+        initCommand(new UpdateClientDowngradeConfigCommand());
     }
 
     private static void initLogback() throws JoranException {

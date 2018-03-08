@@ -15,12 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.rocketmq.common.namesrv;
+package org.apache.rocketmq.common.protocol.header.namesrv;
 
-public class NamesrvUtil {
-    public static final String NAMESPACE_ORDER_TOPIC_CONFIG = "ORDER_TOPIC_CONFIG";
+import org.apache.rocketmq.remoting.CommandCustomHeader;
+import org.apache.rocketmq.remoting.annotation.CFNotNull;
+import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
-    public static final String NAMESPACE_TIMED_KV_NAMESPACE_ENABLE = "TIMED_KV_NAMESPACE_ENABLE";
+public class GetTimedKVListByNamespaceRequestHeader implements CommandCustomHeader {
+    @CFNotNull
+    private String namespace;
 
-    public static final String TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG = "CLIENT_DOWNGRADE_CONFIG";
+    @Override
+    public void checkFields() throws RemotingCommandException {
+    }
+
+    public String getNamespace() {
+        return namespace;
+    }
+
+    public void setNamespace(String namespace) {
+        this.namespace = namespace;
+    }
 }

@@ -20,9 +20,12 @@ import io.netty.channel.ChannelHandlerContext;
 import java.io.UnsupportedEncodingException;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.MQVersion;
 import org.apache.rocketmq.common.MQVersion.Version;
 import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.help.FAQUrl;
 import org.apache.rocketmq.common.namesrv.NamesrvUtil;
@@ -33,12 +36,17 @@ import org.apache.rocketmq.common.protocol.body.RegisterBrokerBody;
 import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
 import org.apache.rocketmq.common.protocol.header.GetTopicsByClusterRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.DeleteKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.DeleteTimedKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.DeleteTopicInNamesrvRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVConfigResponseHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVListByNamespaceRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetRouteInfoRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVConfigResponseHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVListByNamespaceRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.PutKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.PutTimedKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.RegisterBrokerRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.RegisterBrokerResponseHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.UnRegisterBrokerRequestHeader;
@@ -79,6 +87,12 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
                 return this.getKVConfig(ctx, request);
             case RequestCode.DELETE_KV_CONFIG:
                 return this.deleteKVConfig(ctx, request);
+            case RequestCode.PUT_TIMEDKV_CONFIG:
+                return this.putTimedKVConfig(ctx, request);
+            case RequestCode.GET_TIMEDKV_CONFIG:
+                return this.getTimedKVConfig(ctx, request);
+            case RequestCode.DELETE_TIMEDKV_CONFIG:
+                return this.deleteTimedKVConfig(ctx, request);
             case RequestCode.REGISTER_BROKER:
                 Version brokerVersion = MQVersion.value2Version(request.getVersion());
                 if (brokerVersion.ordinal() >= MQVersion.Version.V3_0_11.ordinal()) {
@@ -100,6 +114,8 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
                 return deleteTopicInNamesrv(ctx, request);
             case RequestCode.GET_KVLIST_BY_NAMESPACE:
                 return this.getKVListByNamespace(ctx, request);
+            case RequestCode.GET_TIMEDKVLIST_BY_NAMESPACE:
+                return this.getTimedKVListByNamespace(ctx, request);
             case RequestCode.GET_TOPICS_BY_CLUSTER:
                 return this.getTopicsByCluster(ctx, request);
             case RequestCode.GET_SYSTEM_TOPIC_LIST_FROM_NS:
@@ -173,6 +189,69 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
             (DeleteKVConfigRequestHeader) request.decodeCommandCustomHeader(DeleteKVConfigRequestHeader.class);
 
         this.namesrvController.getKvConfigManager().deleteKVConfig(
+            requestHeader.getNamespace(),
+            requestHeader.getKey()
+        );
+
+        response.setCode(ResponseCode.SUCCESS);
+        response.setRemark(null);
+        return response;
+    }
+
+    public RemotingCommand putTimedKVConfig(ChannelHandlerContext ctx,
+        RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        final PutTimedKVConfigRequestHeader requestHeader =
+            (PutTimedKVConfigRequestHeader) request.decodeCommandCustomHeader(PutTimedKVConfigRequestHeader.class);
+
+        if (StringUtils.isNumeric(requestHeader.getTimeout())) {
+            long timeout = Long.parseLong(requestHeader.getTimeout());
+            TimedConfig timedConfig = new TimedConfig(requestHeader.getValue(), timeout);
+            this.namesrvController.getTimedKVConfigManager().putTimedKVConfig(
+                requestHeader.getNamespace(),
+                requestHeader.getKey(),
+                timedConfig);
+            response.setCode(ResponseCode.SUCCESS);
+            response.setRemark(null);
+        } else {
+            response.setCode(ResponseCode.MESSAGE_ILLEGAL);
+            response.setRemark("Invalid TimedConfig timeout");
+        }
+        return response;
+    }
+
+    public RemotingCommand getTimedKVConfig(ChannelHandlerContext ctx,
+        RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(GetTimedKVConfigResponseHeader.class);
+        final GetTimedKVConfigResponseHeader responseHeader = (GetTimedKVConfigResponseHeader) response.readCustomHeader();
+        final GetTimedKVConfigRequestHeader requestHeader =
+            (GetTimedKVConfigRequestHeader) request.decodeCommandCustomHeader(GetTimedKVConfigRequestHeader.class);
+
+        TimedConfig timedKVConfig = this.namesrvController.getTimedKVConfigManager().getTimedKVConfig(
+            requestHeader.getNamespace(),
+            requestHeader.getKey()
+        );
+
+        if (timedKVConfig != null) {
+            responseHeader.setValue(timedKVConfig.getValue());
+            responseHeader.setTimeout(new Long(timedKVConfig.getTimeout()).toString());
+            response.setCode(ResponseCode.SUCCESS);
+            response.setRemark(null);
+            return response;
+        }
+
+        response.setCode(ResponseCode.QUERY_NOT_FOUND);
+        response.setRemark("No config item, Namespace: " + requestHeader.getNamespace() + " Key: " + requestHeader.getKey());
+        return response;
+    }
+
+    public RemotingCommand deleteTimedKVConfig(ChannelHandlerContext ctx,
+        RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        final DeleteTimedKVConfigRequestHeader requestHeader =
+            (DeleteTimedKVConfigRequestHeader) request.decodeCommandCustomHeader(DeleteTimedKVConfigRequestHeader.class);
+
+        this.namesrvController.getTimedKVConfigManager().deleteTimedKVConfig(
             requestHeader.getNamespace(),
             requestHeader.getKey()
         );
@@ -364,6 +443,26 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
             (GetKVListByNamespaceRequestHeader) request.decodeCommandCustomHeader(GetKVListByNamespaceRequestHeader.class);
 
         byte[] jsonValue = this.namesrvController.getKvConfigManager().getKVListByNamespace(
+            requestHeader.getNamespace());
+        if (null != jsonValue) {
+            response.setBody(jsonValue);
+            response.setCode(ResponseCode.SUCCESS);
+            response.setRemark(null);
+            return response;
+        }
+
+        response.setCode(ResponseCode.QUERY_NOT_FOUND);
+        response.setRemark("No config item, Namespace: " + requestHeader.getNamespace());
+        return response;
+    }
+
+    private RemotingCommand getTimedKVListByNamespace(ChannelHandlerContext ctx,
+                                                 RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        final GetTimedKVListByNamespaceRequestHeader requestHeader =
+            (GetTimedKVListByNamespaceRequestHeader) request.decodeCommandCustomHeader(GetTimedKVListByNamespaceRequestHeader.class);
+
+        byte[] jsonValue = this.namesrvController.getTimedKVConfigManager().getTimedKVListByNamespace(
             requestHeader.getNamespace());
         if (null != jsonValue) {
             response.setBody(jsonValue);

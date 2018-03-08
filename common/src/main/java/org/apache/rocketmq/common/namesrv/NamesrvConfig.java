@@ -30,6 +30,7 @@ public class NamesrvConfig {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
     private String rocketmqHome = System.getProperty(MixAll.ROCKETMQ_HOME_PROPERTY, System.getenv(MixAll.ROCKETMQ_HOME_ENV));
+    private String timedKVConfigPath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "timedKVConfig.json";
     private String kvConfigPath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "kvConfig.json";
     private String configStorePath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "namesrv.properties";
     private String productEnvName = "center";
@@ -82,5 +83,13 @@ public class NamesrvConfig {
 
     public void setConfigStorePath(final String configStorePath) {
         this.configStorePath = configStorePath;
+    }
+
+    public String getTimedKVConfigPath() {
+        return timedKVConfigPath;
+    }
+
+    public void setTimedKVConfigPath(String timedKVConfigPath) {
+        this.timedKVConfigPath = timedKVConfigPath;
     }
 }

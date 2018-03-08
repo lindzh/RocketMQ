@@ -14,13 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.rocketmq.common.protocol.body;
 
-package org.apache.rocketmq.common.namesrv;
+import org.apache.rocketmq.common.TimedConfig;
+import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
-public class NamesrvUtil {
-    public static final String NAMESPACE_ORDER_TOPIC_CONFIG = "ORDER_TOPIC_CONFIG";
+import java.util.HashMap;
 
-    public static final String NAMESPACE_TIMED_KV_NAMESPACE_ENABLE = "TIMED_KV_NAMESPACE_ENABLE";
+public class TimedKVTable extends RemotingSerializable {
+    private HashMap<String, TimedConfig> table = new HashMap<String, TimedConfig>();
 
-    public static final String TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG = "CLIENT_DOWNGRADE_CONFIG";
+    public HashMap<String, TimedConfig> getTable() {
+        return table;
+    }
+
+    public void setTable(HashMap<String, TimedConfig> table) {
+        this.table = table;
+    }
 }

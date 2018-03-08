@@ -39,6 +39,7 @@ import org.apache.rocketmq.client.impl.factory.MQClientInstance;
 import org.apache.rocketmq.client.log.ClientLogger;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.ServiceState;
+import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.admin.ConsumeStats;
@@ -46,6 +47,9 @@ import org.apache.rocketmq.common.admin.OffsetWrapper;
 import org.apache.rocketmq.common.admin.RollbackStats;
 import org.apache.rocketmq.common.admin.TopicOffset;
 import org.apache.rocketmq.common.admin.TopicStatsTable;
+import org.apache.rocketmq.common.constant.GroupType;
+import org.apache.rocketmq.common.downgrade.DowngradeConfig;
+import org.apache.rocketmq.common.downgrade.DowngradeUtils;
 import org.apache.rocketmq.common.help.FAQUrl;
 import org.apache.rocketmq.common.message.MessageClientExt;
 import org.apache.rocketmq.common.message.MessageConst;
@@ -66,6 +70,7 @@ import org.apache.rocketmq.common.protocol.body.ProducerConnection;
 import org.apache.rocketmq.common.protocol.body.QueryConsumeQueueResponseBody;
 import org.apache.rocketmq.common.protocol.body.QueueTimeSpan;
 import org.apache.rocketmq.common.protocol.body.SubscriptionGroupWrapper;
+import org.apache.rocketmq.common.protocol.body.TimedKVTable;
 import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
 import org.apache.rocketmq.common.protocol.body.TopicList;
 import org.apache.rocketmq.common.protocol.header.UpdateConsumerOffsetRequestHeader;
@@ -999,5 +1004,63 @@ public class DefaultMQAdminExtImpl implements MQAdminExt, MQAdminExtInner {
         return this.mqClientInstance.getMQClientAPIImpl().queryConsumeQueue(
             brokerAddr, topic, queueId, index, count, consumerGroup, timeoutMillis
         );
+    }
+
+    @Override
+    public void deleteTimedKVConfig(String namespace, String key) throws RemotingException, MQClientException,
+        InterruptedException {
+        this.mqClientInstance.getMQClientAPIImpl().deleteTimedKVConfigValue(namespace, key, timeoutMillis);
+    }
+
+    @Override
+    public void putTimedKVConfig(String namespace, String key, TimedConfig config) throws RemotingException,
+        MQClientException, InterruptedException {
+        this.mqClientInstance.getMQClientAPIImpl().putTimedKVConfigValue(namespace, key, config, timeoutMillis);
+    }
+
+    @Override
+    public TimedConfig getTimedKVConfig(String namespace, String key) throws RemotingException, MQClientException,
+        InterruptedException {
+        return mqClientInstance.getMQClientAPIImpl().getTimedKVConfigValue(namespace, key, timeoutMillis);
+    }
+
+    @Override
+    public TimedKVTable getTimedKVListByNamespace(String namespace) throws RemotingException, MQClientException,
+        InterruptedException {
+        return mqClientInstance.getMQClientAPIImpl().getTimedKVListByNamespace(namespace, timeoutMillis);
+    }
+
+    @Override
+    public DowngradeConfig getDowngradeConfig(GroupType groupType, String group, String topic) throws RemotingException,
+        MQClientException, InterruptedException {
+
+        String key = DowngradeUtils.genDowngradeKey(groupType, group, topic);
+        TimedConfig timedConfig = this.mqClientInstance.getMQClientAPIImpl()
+            .getTimedKVConfigValue(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, key, timeoutMillis);
+        if (timedConfig != null) {
+            try {
+                return DowngradeUtils.fromTimedConfig(timedConfig);
+            } catch (Exception e) {
+                throw new MQClientException("Convert TimedConfig to DowngradeConfig error", e);
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void updateDowngradeConfig(GroupType groupType, String group, String topic, DowngradeConfig downgradeConfig)
+        throws RemotingException, MQClientException, InterruptedException {
+        String key = DowngradeUtils.genDowngradeKey(groupType, group, topic);
+        TimedConfig config = null;
+        try {
+            config = DowngradeUtils.toTimedConfig(downgradeConfig);
+        } catch (Exception e) {
+            throw new MQClientException("Convert DowngradeConfig to TimedConfig error", e);
+        }
+        if (config != null) {
+            this.putTimedKVConfig(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, key, config);
+        } else {
+            throw new MQClientException("Invalid DowngradeConfig", null);
+        }
     }
 }

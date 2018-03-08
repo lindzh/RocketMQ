@@ -44,6 +44,7 @@ import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.common.MQVersion;
 import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.admin.ConsumeStats;
@@ -77,6 +78,7 @@ import org.apache.rocketmq.common.protocol.body.QueryCorrectionOffsetBody;
 import org.apache.rocketmq.common.protocol.body.QueueTimeSpan;
 import org.apache.rocketmq.common.protocol.body.ResetOffsetBody;
 import org.apache.rocketmq.common.protocol.body.SubscriptionGroupWrapper;
+import org.apache.rocketmq.common.protocol.body.TimedKVTable;
 import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
 import org.apache.rocketmq.common.protocol.body.TopicList;
 import org.apache.rocketmq.common.protocol.body.UnlockBatchRequestBody;
@@ -124,11 +126,16 @@ import org.apache.rocketmq.common.protocol.header.ViewBrokerStatsDataRequestHead
 import org.apache.rocketmq.common.protocol.header.ViewMessageRequestHeader;
 import org.apache.rocketmq.common.protocol.header.filtersrv.RegisterMessageFilterClassRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.DeleteKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.DeleteTimedKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVConfigResponseHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVListByNamespaceRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetRouteInfoRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVConfigResponseHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVListByNamespaceRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.PutKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.PutTimedKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.WipeWritePermOfBrokerRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.WipeWritePermOfBrokerResponseHeader;
 import org.apache.rocketmq.common.protocol.heartbeat.HeartbeatData;
@@ -1422,6 +1429,110 @@ public class MQClientAPIImpl {
         switch (response.getCode()) {
             case ResponseCode.SUCCESS: {
                 return KVTable.decode(response.getBody(), KVTable.class);
+            }
+            default:
+                break;
+        }
+
+        throw new MQClientException(response.getCode(), response.getRemark());
+    }
+
+    public TimedConfig getTimedKVConfigValue(final String namespace, final String key, final long timeoutMillis)
+        throws RemotingException, MQClientException, InterruptedException {
+        GetTimedKVConfigRequestHeader requestHeader = new GetTimedKVConfigRequestHeader();
+        requestHeader.setNamespace(namespace);
+        requestHeader.setKey(key);
+
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_TIMEDKV_CONFIG, requestHeader);
+
+        RemotingCommand response = this.remotingClient.invokeSync(null, request, timeoutMillis);
+        assert response != null;
+        switch (response.getCode()) {
+            case ResponseCode.SUCCESS: {
+                GetTimedKVConfigResponseHeader responseHeader =
+                    (GetTimedKVConfigResponseHeader) response.decodeCommandCustomHeader(GetTimedKVConfigResponseHeader.class);
+                return new TimedConfig(responseHeader.getValue(), Long.parseLong(responseHeader.getTimeout()));
+            }
+            case ResponseCode.QUERY_NOT_FOUND: {
+                return null;
+            }
+            default:
+                break;
+        }
+        throw new MQClientException(response.getCode(), response.getRemark());
+    }
+
+    public void putTimedKVConfigValue(final String namespace, final String key, final TimedConfig config, final long timeoutMillis)
+        throws RemotingException, MQClientException, InterruptedException {
+        PutTimedKVConfigRequestHeader requestHeader = new PutTimedKVConfigRequestHeader();
+        requestHeader.setNamespace(namespace);
+        requestHeader.setKey(key);
+        requestHeader.setValue(config.getValue());
+        requestHeader.setTimeout(new Long(config.getTimeout()).toString());
+
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.PUT_TIMEDKV_CONFIG, requestHeader);
+
+        List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
+        if (nameServerAddressList != null) {
+            RemotingCommand errResponse = null;
+            for (String namesrvAddr : nameServerAddressList) {
+                RemotingCommand response = this.remotingClient.invokeSync(namesrvAddr, request, timeoutMillis);
+                assert response != null;
+                switch (response.getCode()) {
+                    case ResponseCode.SUCCESS: {
+                        break;
+                    }
+                    default:
+                        errResponse = response;
+                }
+            }
+
+            if (errResponse != null) {
+                throw new MQClientException(errResponse.getCode(), errResponse.getRemark());
+            }
+        }
+    }
+
+    public void deleteTimedKVConfigValue(final String namespace, final String key, final long timeoutMillis)
+        throws RemotingException, MQClientException, InterruptedException {
+        DeleteTimedKVConfigRequestHeader requestHeader = new DeleteTimedKVConfigRequestHeader();
+        requestHeader.setNamespace(namespace);
+        requestHeader.setKey(key);
+
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.DELETE_TIMEDKV_CONFIG, requestHeader);
+
+        List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
+        if (nameServerAddressList != null) {
+            RemotingCommand errResponse = null;
+            for (String namesrvAddr : nameServerAddressList) {
+                RemotingCommand response = this.remotingClient.invokeSync(namesrvAddr, request, timeoutMillis);
+                assert response != null;
+                switch (response.getCode()) {
+                    case ResponseCode.SUCCESS: {
+                        break;
+                    }
+                    default:
+                        errResponse = response;
+                }
+            }
+            if (errResponse != null) {
+                throw new MQClientException(errResponse.getCode(), errResponse.getRemark());
+            }
+        }
+    }
+
+    public TimedKVTable getTimedKVListByNamespace(final String namespace, final long timeoutMillis)
+        throws RemotingException, MQClientException, InterruptedException {
+        GetTimedKVListByNamespaceRequestHeader requestHeader = new GetTimedKVListByNamespaceRequestHeader();
+        requestHeader.setNamespace(namespace);
+
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_KVLIST_BY_NAMESPACE, requestHeader);
+
+        RemotingCommand response = this.remotingClient.invokeSync(null, request, timeoutMillis);
+        assert response != null;
+        switch (response.getCode()) {
+            case ResponseCode.SUCCESS: {
+                return TimedKVTable.decode(response.getBody(), TimedKVTable.class);
             }
             default:
                 break;

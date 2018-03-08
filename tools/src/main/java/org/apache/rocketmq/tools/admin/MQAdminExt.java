@@ -24,10 +24,13 @@ import java.util.Set;
 import org.apache.rocketmq.client.MQAdmin;
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
+import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.admin.ConsumeStats;
 import org.apache.rocketmq.common.admin.RollbackStats;
 import org.apache.rocketmq.common.admin.TopicStatsTable;
+import org.apache.rocketmq.common.constant.GroupType;
+import org.apache.rocketmq.common.downgrade.DowngradeConfig;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.body.BrokerStatsData;
@@ -42,6 +45,7 @@ import org.apache.rocketmq.common.protocol.body.ProducerConnection;
 import org.apache.rocketmq.common.protocol.body.QueryConsumeQueueResponseBody;
 import org.apache.rocketmq.common.protocol.body.QueueTimeSpan;
 import org.apache.rocketmq.common.protocol.body.SubscriptionGroupWrapper;
+import org.apache.rocketmq.common.protocol.body.TimedKVTable;
 import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
 import org.apache.rocketmq.common.protocol.body.TopicList;
 import org.apache.rocketmq.common.protocol.route.TopicRouteData;
@@ -259,4 +263,24 @@ public interface MQAdminExt extends MQAdmin {
         final String topic, final int queueId,
         final long index, final int count, final String consumerGroup)
         throws InterruptedException, RemotingTimeoutException, RemotingSendRequestException, RemotingConnectException, MQClientException;
+
+
+    void deleteTimedKVConfig(final String namespace, final String key) throws RemotingException,
+        MQClientException, InterruptedException;
+
+    void putTimedKVConfig(final String namespace, final String key, final TimedConfig config) throws RemotingException,
+        MQClientException, InterruptedException;
+
+    TimedConfig getTimedKVConfig(final String namespace,
+                       final String key) throws RemotingException, MQClientException, InterruptedException;
+
+    TimedKVTable getTimedKVListByNamespace(
+        final String namespace) throws RemotingException, MQClientException, InterruptedException;
+
+    DowngradeConfig getDowngradeConfig(GroupType groupType, String group, String topic) throws RemotingException, MQClientException,
+        InterruptedException;
+
+    void updateDowngradeConfig(GroupType groupType, String group, String topic,DowngradeConfig downgradeConfig)throws RemotingException,
+        MQClientException, InterruptedException;
+
 }

@@ -25,6 +25,7 @@ import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.namesrv.NamesrvConfig;
 import org.apache.rocketmq.namesrv.kvconfig.KVConfigManager;
+import org.apache.rocketmq.namesrv.kvconfig.TimedKVConfigManager;
 import org.apache.rocketmq.namesrv.processor.ClusterTestRequestProcessor;
 import org.apache.rocketmq.namesrv.processor.DefaultRequestProcessor;
 import org.apache.rocketmq.namesrv.routeinfo.BrokerHousekeepingService;
@@ -48,6 +49,7 @@ public class NamesrvController {
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
         "NSScheduledThread"));
     private final KVConfigManager kvConfigManager;
+    private final TimedKVConfigManager timedKVConfigManager;
     private final RouteInfoManager routeInfoManager;
 
     private RemotingServer remotingServer;
@@ -63,6 +65,7 @@ public class NamesrvController {
         this.namesrvConfig = namesrvConfig;
         this.nettyServerConfig = nettyServerConfig;
         this.kvConfigManager = new KVConfigManager(this);
+        this.timedKVConfigManager = new TimedKVConfigManager(this);
         this.routeInfoManager = new RouteInfoManager();
         this.brokerHousekeepingService = new BrokerHousekeepingService(this);
         this.configuration = new Configuration(
@@ -75,6 +78,8 @@ public class NamesrvController {
     public boolean initialize() {
 
         this.kvConfigManager.load();
+
+        this.timedKVConfigManager.load();
 
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 
@@ -96,6 +101,22 @@ public class NamesrvController {
             @Override
             public void run() {
                 NamesrvController.this.kvConfigManager.printAllPeriodically();
+            }
+        }, 1, 10, TimeUnit.MINUTES);
+
+        this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
+
+            @Override
+            public void run() {
+                NamesrvController.this.timedKVConfigManager.scanTimeoutKVConfig();
+            }
+        }, 1, 1, TimeUnit.MINUTES);
+
+        this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
+
+            @Override
+            public void run() {
+                NamesrvController.this.timedKVConfigManager.printAllPeriodically();
             }
         }, 1, 10, TimeUnit.MINUTES);
 
@@ -195,5 +216,9 @@ public class NamesrvController {
 
     public Configuration getConfiguration() {
         return configuration;
+    }
+
+    public TimedKVConfigManager getTimedKVConfigManager() {
+        return timedKVConfigManager;
     }
 }

@@ -24,16 +24,25 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.namesrv.NamesrvConfig;
+import org.apache.rocketmq.common.namesrv.NamesrvUtil;
 import org.apache.rocketmq.common.namesrv.RegisterBrokerResult;
 import org.apache.rocketmq.common.protocol.RequestCode;
 import org.apache.rocketmq.common.protocol.ResponseCode;
+import org.apache.rocketmq.common.protocol.body.TimedKVTable;
 import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
 import org.apache.rocketmq.common.protocol.header.namesrv.DeleteKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.DeleteTimedKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVConfigResponseHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVConfigResponseHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.GetTimedKVListByNamespaceRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.PutKVConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.namesrv.PutTimedKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.RegisterBrokerRequestHeader;
 import org.apache.rocketmq.common.protocol.route.BrokerData;
 import org.apache.rocketmq.namesrv.NamesrvController;
@@ -158,6 +167,125 @@ public class DefaultRequestProcessorTest {
 
         assertThat(namesrvController.getKvConfigManager().getKVConfig("namespace", "key"))
             .isNull();
+    }
+
+    @Test
+    public void testProcessRequest_PutTimedKV() throws RemotingCommandException {
+        PutTimedKVConfigRequestHeader putTimedKVConfigRequestHeader = new PutTimedKVConfigRequestHeader();
+        putTimedKVConfigRequestHeader.setNamespace(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG);
+        putTimedKVConfigRequestHeader.setKey("simple1");
+        putTimedKVConfigRequestHeader.setValue("test");
+        putTimedKVConfigRequestHeader.setTimeout(new Long(System.currentTimeMillis()+5000).toString());
+
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.PUT_TIMEDKV_CONFIG,
+            putTimedKVConfigRequestHeader);
+        request.addExtField("namespace",putTimedKVConfigRequestHeader.getNamespace());
+        request.addExtField("key",putTimedKVConfigRequestHeader.getKey());
+        request.addExtField("value",putTimedKVConfigRequestHeader.getValue());
+        request.addExtField("timeout",putTimedKVConfigRequestHeader.getTimeout());
+
+        RemotingCommand response = defaultRequestProcessor.processRequest(null, request);
+        assertThat(response.getCode()).isEqualTo(ResponseCode.SUCCESS);
+        assertThat(response.getRemark()).isNull();
+
+        assertThat(namesrvController.getTimedKVConfigManager().getTimedKVConfig(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, "simple1"))
+            .isNotNull();
+    }
+
+    @Test
+    public void testProcessRequest_DeleteTimedKV() throws RemotingCommandException {
+        namesrvController.getTimedKVConfigManager().putTimedKVConfig("namespace1","consumer1",
+            new TimedConfig("consumer value",System.currentTimeMillis()+2000));
+        assertThat(namesrvController.getTimedKVConfigManager().getTimedKVConfig("namespace1","consumer1")).isNotNull();
+
+        DeleteTimedKVConfigRequestHeader deleteTimedKVConfigRequestHeader = new DeleteTimedKVConfigRequestHeader();
+        deleteTimedKVConfigRequestHeader.setNamespace("namespace1");
+        deleteTimedKVConfigRequestHeader.setKey("consumer1");
+
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.DELETE_TIMEDKV_CONFIG,
+            deleteTimedKVConfigRequestHeader);
+        request.addExtField("namespace",deleteTimedKVConfigRequestHeader.getNamespace());
+        request.addExtField("key",deleteTimedKVConfigRequestHeader.getKey());
+
+        RemotingCommand response = defaultRequestProcessor.processRequest(null, request);
+        assertThat(response.getCode()).isEqualTo(ResponseCode.SUCCESS);
+        assertThat(response.getRemark()).isNull();
+
+        assertThat(namesrvController.getTimedKVConfigManager().getTimedKVConfig("namespace1","consumer1")).isNull();
+    }
+
+    @Test
+    public void testProcessRequest_GetTimedKV() throws RemotingCommandException {
+        namesrvController.getTimedKVConfigManager().putTimedKVConfig("namespace2","consumer1",
+            new TimedConfig("consumer value",System.currentTimeMillis()+2000));
+        assertThat(namesrvController.getTimedKVConfigManager().getTimedKVConfig("namespace2","consumer1")).isNotNull();
+
+        namesrvController.getTimedKVConfigManager().putTimedKVConfig("namespace2","consumer2",
+            new TimedConfig("consumer value",System.currentTimeMillis()));
+        assertThat(namesrvController.getTimedKVConfigManager().getTimedKVConfig("namespace2","consumer1")).isNotNull();
+
+        GetTimedKVConfigRequestHeader getTimedKVConfigRequestHeader = new GetTimedKVConfigRequestHeader();
+        getTimedKVConfigRequestHeader.setNamespace("namespace2");
+        getTimedKVConfigRequestHeader.setKey("consumer1");
+
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_TIMEDKV_CONFIG,
+            getTimedKVConfigRequestHeader);
+        request.addExtField("namespace",getTimedKVConfigRequestHeader.getNamespace());
+        request.addExtField("key",getTimedKVConfigRequestHeader.getKey());
+
+        RemotingCommand response = defaultRequestProcessor.processRequest(null, request);
+        assertThat(response.getCode()).isEqualTo(ResponseCode.SUCCESS);
+        assertThat(response.getRemark()).isNull();
+
+        GetTimedKVConfigResponseHeader getTimedKVConfigResponseHeader = (GetTimedKVConfigResponseHeader)response.readCustomHeader();
+        String value = getTimedKVConfigResponseHeader.getValue();
+        assertThat(value).isNotNull();
+
+        GetTimedKVConfigRequestHeader getTimedKVConfigRequestHeader2 = new GetTimedKVConfigRequestHeader();
+        getTimedKVConfigRequestHeader2.setNamespace("namespace2");
+        getTimedKVConfigRequestHeader2.setKey("consumer2");
+
+        RemotingCommand request2 = RemotingCommand.createRequestCommand(RequestCode.GET_TIMEDKV_CONFIG,
+            getTimedKVConfigRequestHeader2);
+        request2.addExtField("namespace",getTimedKVConfigRequestHeader2.getNamespace());
+        request2.addExtField("key",getTimedKVConfigRequestHeader2.getKey());
+
+        RemotingCommand response2 = defaultRequestProcessor.processRequest(null, request2);
+        assertThat(response2.getCode()).isEqualTo(ResponseCode.QUERY_NOT_FOUND);
+        assertThat(response2.getRemark()).isNotNull();
+    }
+
+    @Test
+    public void testProcessRequest_GetTimedNamespaceKV() throws RemotingCommandException, InterruptedException {
+        namesrvController.getTimedKVConfigManager().putTimedKVConfig("namespace2","consumer1",
+            new TimedConfig("consumer value",System.currentTimeMillis()+2000));
+        assertThat(namesrvController.getTimedKVConfigManager().getTimedKVConfig("namespace2","consumer1")).isNotNull();
+
+        namesrvController.getTimedKVConfigManager().putTimedKVConfig("namespace2","consumer2",
+            new TimedConfig("consumer value",System.currentTimeMillis()+10));
+        assertThat(namesrvController.getTimedKVConfigManager().getTimedKVConfig("namespace2","consumer2")).isNotNull();
+
+        Thread.sleep(10);
+
+        GetTimedKVListByNamespaceRequestHeader getTimedKVListByNamespaceRequestHeader = new GetTimedKVListByNamespaceRequestHeader();
+        getTimedKVListByNamespaceRequestHeader.setNamespace("namespace2");
+
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_TIMEDKVLIST_BY_NAMESPACE,
+            getTimedKVListByNamespaceRequestHeader);
+        request.addExtField("namespace",getTimedKVListByNamespaceRequestHeader.getNamespace());
+
+        RemotingCommand response = defaultRequestProcessor.processRequest(null, request);
+        assertThat(response.getCode()).isEqualTo(ResponseCode.SUCCESS);
+        assertThat(response.getRemark()).isNull();
+
+        byte[] body = response.getBody();
+        TimedKVTable timedKVTable = TimedKVTable.fromJson(new String(body), TimedKVTable.class);
+        assertThat(timedKVTable.getTable().get("consumer2")).isNotNull();
+        assertThat(timedKVTable.getTable().get("consumer2")).isNotNull();
+        assertThat(timedKVTable.getTable().get("consumer2").getTimeout()).isLessThan(System.currentTimeMillis());
+
+        namesrvController.getTimedKVConfigManager().deleteTimedKVConfig("namespace2","consumer2");
+        namesrvController.getTimedKVConfigManager().deleteTimedKVConfig("namespace2","consumer1");
     }
 
     @Test

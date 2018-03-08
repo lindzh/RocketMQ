@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.rocketmq.common.namesrv;
+package org.apache.rocketmq.common.constant;
 
-public class NamesrvUtil {
-    public static final String NAMESPACE_ORDER_TOPIC_CONFIG = "ORDER_TOPIC_CONFIG";
+public enum GroupType {
 
-    public static final String NAMESPACE_TIMED_KV_NAMESPACE_ENABLE = "TIMED_KV_NAMESPACE_ENABLE";
+    PRODUCER,
+    CONSUMER
 
-    public static final String TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG = "CLIENT_DOWNGRADE_CONFIG";
 }

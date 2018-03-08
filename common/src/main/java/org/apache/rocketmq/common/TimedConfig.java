@@ -15,12 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.rocketmq.common.namesrv;
+package org.apache.rocketmq.common;
 
-public class NamesrvUtil {
-    public static final String NAMESPACE_ORDER_TOPIC_CONFIG = "ORDER_TOPIC_CONFIG";
+public class TimedConfig {
 
-    public static final String NAMESPACE_TIMED_KV_NAMESPACE_ENABLE = "TIMED_KV_NAMESPACE_ENABLE";
+    private String value;
 
-    public static final String TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG = "CLIENT_DOWNGRADE_CONFIG";
+    private long timeout;
+
+    public TimedConfig() {
+
+    }
+
+    public TimedConfig(String value, long timeout) {
+        this.value = value;
+        this.timeout = timeout;
+    }
+
+    public String getValue() {
+        return value;
+    }
+
+    public void setValue(String value) {
+        this.value = value;
+    }
+
+    public long getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(long timeout) {
+        this.timeout = timeout;
+    }
 }
