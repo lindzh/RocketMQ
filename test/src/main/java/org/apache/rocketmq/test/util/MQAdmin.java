@@ -62,7 +62,7 @@ public class MQAdmin {
         return createResult;
     }
 
-    public static DefaultMQAdminExt createMQAdminExt(String nameSrvAddr){
+    public static DefaultMQAdminExt createMQAdminExt(String nameSrvAddr) {
         DefaultMQAdminExt mqAdminExt = new DefaultMQAdminExt();
         mqAdminExt.setNamesrvAddr(nameSrvAddr);
         return mqAdminExt;
