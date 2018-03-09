@@ -62,6 +62,12 @@ public class MQAdmin {
         return createResult;
     }
 
+    public static DefaultMQAdminExt createMQAdminExt(String nameSrvAddr){
+        DefaultMQAdminExt mqAdminExt = new DefaultMQAdminExt();
+        mqAdminExt.setNamesrvAddr(nameSrvAddr);
+        return mqAdminExt;
+    }
+
     private static boolean checkTopicExist(DefaultMQAdminExt mqAdminExt, String topic) {
         boolean createResult = false;
         try {

@@ -1526,7 +1526,7 @@ public class MQClientAPIImpl {
         GetTimedKVListByNamespaceRequestHeader requestHeader = new GetTimedKVListByNamespaceRequestHeader();
         requestHeader.setNamespace(namespace);
 
-        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_KVLIST_BY_NAMESPACE, requestHeader);
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_TIMEDKVLIST_BY_NAMESPACE, requestHeader);
 
         RemotingCommand response = this.remotingClient.invokeSync(null, request, timeoutMillis);
         assert response != null;

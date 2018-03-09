@@ -495,12 +495,11 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
         final GetTimedKVListByNamespaceRequestHeader requestHeader =
             (GetTimedKVListByNamespaceRequestHeader) request.decodeCommandCustomHeader(GetTimedKVListByNamespaceRequestHeader.class);
-
         byte[] jsonValue = this.namesrvController.getTimedKVConfigManager().getTimedKVListByNamespace(
             requestHeader.getNamespace());
         if (null != jsonValue) {
-            response.setBody(jsonValue);
             response.setCode(ResponseCode.SUCCESS);
+            response.setBody(jsonValue);
             response.setRemark(null);
             return response;
         }
