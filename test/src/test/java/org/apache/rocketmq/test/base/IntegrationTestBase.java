@@ -103,6 +103,7 @@ public class IntegrationTestBase {
         NamesrvConfig namesrvConfig = new NamesrvConfig();
         NettyServerConfig nameServerNettyServerConfig = new NettyServerConfig();
         namesrvConfig.setKvConfigPath(baseDir + SEP + "namesrv" + SEP + "kvConfig.json");
+        namesrvConfig.setTimedKVConfigPath(baseDir + SEP + "namesrv" + SEP + "timedKVConfig.json");
         namesrvConfig.setConfigStorePath(baseDir + SEP + "namesrv" + SEP + "namesrv.properties");
 
         nameServerNettyServerConfig.setListenPort(9000 + random.nextInt(1000));

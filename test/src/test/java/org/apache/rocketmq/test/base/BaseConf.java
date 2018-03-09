@@ -18,9 +18,14 @@
 package org.apache.rocketmq.test.base;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import org.apache.log4j.Logger;
 import org.apache.rocketmq.broker.BrokerController;
+import org.apache.rocketmq.common.constant.GroupType;
+import org.apache.rocketmq.common.downgrade.DowngradeConfig;
+import org.apache.rocketmq.common.downgrade.DowngradeUtils;
+import org.apache.rocketmq.common.namesrv.NamesrvUtil;
 import org.apache.rocketmq.namesrv.NamesrvController;
 import org.apache.rocketmq.test.client.rmq.RMQAsyncSendProducer;
 import org.apache.rocketmq.test.client.rmq.RMQNormalConsumer;
@@ -47,6 +52,8 @@ public class BaseConf {
     protected static boolean debug = false;
     private static Logger log = Logger.getLogger(BaseConf.class);
 
+    protected static String downgradeTopic = "downgradeTest";
+
     static {
         namesrvController = IntegrationTestBase.createAndStartNamesrv();
         nsAddr = "127.0.0.1:" + namesrvController.getNettyServerConfig().getListenPort();
@@ -65,7 +72,7 @@ public class BaseConf {
     public static String initTopic() {
         String topic = MQRandomUtils.getRandomTopic();
         IntegrationTestBase.initTopic(topic, nsAddr, clusterName);
-
+        IntegrationTestBase.initTopic(downgradeTopic, nsAddr, clusterName);
         return topic;
     }
 
@@ -154,6 +161,24 @@ public class BaseConf {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
 
+    public static void enableDowngrade(GroupType groupType,String group){
+        String namespace = NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG;
+        String key = DowngradeUtils.genDowngradeKey(groupType,group);
+        DowngradeConfig downgradeConfig = new DowngradeConfig();
+        downgradeConfig.setDowngradeEnable(true);
+        downgradeConfig.setDownTimeout(System.currentTimeMillis()+100000);
+
+        HashMap<String, DowngradeConfig> downgradeConfigMap = new HashMap<>();
+        downgradeConfigMap.put(downgradeTopic,downgradeConfig);
+
+        namesrvController.getTimedKVConfigManager().putTimedKVConfig(namespace,key,DowngradeUtils.toTimedConfig(downgradeConfigMap));
+    }
+
+    public static void disableDowngrade(GroupType groupType,String group){
+        String namespace = NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG;
+        String key = DowngradeUtils.genDowngradeKey(groupType,group);
+        namesrvController.getTimedKVConfigManager().deleteTimedKVConfig(namespace,key);
     }
 }

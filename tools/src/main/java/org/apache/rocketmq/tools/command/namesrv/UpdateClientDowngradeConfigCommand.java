@@ -29,6 +29,7 @@ import org.apache.rocketmq.tools.command.SubCommandException;
 
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
+import java.util.Map;
 
 public class UpdateClientDowngradeConfigCommand extends AbstractCommand implements SubCommand {
     @Override
@@ -95,16 +96,19 @@ public class UpdateClientDowngradeConfigCommand extends AbstractCommand implemen
 
             String topic = commandLine.getOptionValue('t').trim();
 
-            DowngradeConfig downgradeConfig = defaultMQAdminExt.getDowngradeConfig(groupType, group, topic);
+            Map<String, DowngradeConfig> downgradeConfigMap = defaultMQAdminExt.getDowngradeConfig(groupType, group);
+            if (downgradeConfigMap == null) {
+                downgradeConfigMap = new HashMap<>();
+            }
+            DowngradeConfig downgradeConfig = downgradeConfigMap.get(topic);
             if (downgradeConfig == null) {
                 downgradeConfig = new DowngradeConfig();
+                downgradeConfigMap.put(topic, downgradeConfig);
                 downgradeConfig.setDowngradeEnable(true);
             }
             if (downgradeConfig.getHostDownTimeout() == null) {
                 downgradeConfig.setHostDownTimeout(new HashMap<String, Long>());
             }
-
-            downgradeConfig.setTopic(topic);
             if (commandLine.hasOption('e')) {
                 String enable = commandLine.getOptionValue('e').trim();
                 downgradeConfig.setDowngradeEnable(Boolean.parseBoolean(enable));
@@ -117,7 +121,7 @@ public class UpdateClientDowngradeConfigCommand extends AbstractCommand implemen
                 downgradeConfig.setDownTimeout(timeoutValue);
             }
 
-            defaultMQAdminExt.updateDowngradeConfig(groupType, group, topic, downgradeConfig);
+            defaultMQAdminExt.updateDowngradeConfig(groupType, group, downgradeConfigMap);
             System.out.printf("create or update downgrade config to namespace success.%n");
         } catch (Exception e) {
             throw new SubCommandException(this.getClass().getSimpleName() + " command failed", e);

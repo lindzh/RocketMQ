@@ -37,6 +37,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.util.HashMap;
+import java.util.Map;
 
 public class AdminTimedKVTestIT extends BaseConf {
 
@@ -89,22 +90,23 @@ public class AdminTimedKVTestIT extends BaseConf {
         DowngradeConfig downgradeConfig = new DowngradeConfig();
         downgradeConfig.setHostDownTimeout(new HashMap<String, Long>());
         downgradeConfig.setDowngradeEnable(true);
-        downgradeConfig.setTopic("topic1");
         downgradeConfig.getHostDownTimeout().put("host1",tt);
-        defaultMQAdminExt.updateDowngradeConfig(GroupType.CONSUMER,"consumer1","topic1",downgradeConfig);
+        HashMap<String, DowngradeConfig> downgradeConfigMap = new HashMap<>();
+        downgradeConfigMap.put("topic1",downgradeConfig);
+        defaultMQAdminExt.updateDowngradeConfig(GroupType.CONSUMER,"consumer1",downgradeConfigMap);
 
-        DowngradeConfig config = defaultMQAdminExt.getDowngradeConfig(GroupType.CONSUMER, "consumer1", "topic1");
-        Assert.assertTrue(config!=null);
+        Map<String, DowngradeConfig> downgradeConfigMap1 = defaultMQAdminExt.getDowngradeConfig(GroupType.CONSUMER, "consumer1");
+        Assert.assertTrue(downgradeConfigMap1!=null&&downgradeConfigMap1.get("topic1")!=null);
 
-        String downgradeKey = DowngradeUtils.genDowngradeKey(GroupType.CONSUMER, "consumer1", "topic1");
+        String downgradeKey = DowngradeUtils.genDowngradeKey(GroupType.CONSUMER, "consumer1");
         TimedConfig downgradeTimedConfig = defaultMQAdminExt.getTimedKVConfig(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, downgradeKey);
         Assert.assertTrue(downgradeTimedConfig!=null);
         Assert.assertTrue(downgradeTimedConfig.getTimeout()==tt);
         Assert.assertTrue(downgradeTimedConfig.getValue().contains("host1"));
         System.out.print("downgradeconfig:"+downgradeTimedConfig.getValue()+"%n");
         Thread.sleep(500);
-        config = defaultMQAdminExt.getDowngradeConfig(GroupType.CONSUMER, "consumer1", "topic1");
-        Assert.assertTrue(config==null);
+        Map<String, DowngradeConfig> downgradeConfig1 = defaultMQAdminExt.getDowngradeConfig(GroupType.CONSUMER, "consumer1");
+        Assert.assertTrue(downgradeConfig1==null);
     }
 
     @After

@@ -16,17 +16,28 @@
  */
 package org.apache.rocketmq.client.impl.consumer;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.rebalance.AllocateMessageQueueAveragely;
 import org.apache.rocketmq.client.consumer.store.OffsetStore;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
+import org.apache.rocketmq.common.UtilAll;
+import org.apache.rocketmq.common.constant.GroupType;
+import org.apache.rocketmq.common.downgrade.DowngradeConfig;
+import org.apache.rocketmq.common.downgrade.DowngradeUtils;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
 import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -39,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
@@ -159,5 +171,46 @@ public class RebalancePushImplTest {
         assertThat(defaultMQPushConsumer.consumerRunningInfo().getProperties().get("pullThresholdForQueue")).isEqualTo("341");
         assertThat(defaultMQPushConsumer.consumerRunningInfo().getProperties().get("pullThresholdSizeForTopic")).isEqualTo("1024");
         assertThat(defaultMQPushConsumer.consumerRunningInfo().getProperties().get("pullThresholdForTopic")).isEqualTo("1024");
+    }
+
+    @Test
+    public void testGradepushRebalance() throws NoSuchFieldException, IllegalAccessException {
+
+        RebalancePushImpl rebalancePush = new RebalancePushImpl(consumerGroup, MessageModel.CLUSTERING,
+            new AllocateMessageQueueAveragely(), mqClientInstance, defaultMQPushConsumer);
+
+        init(rebalancePush);
+
+        Set<MessageQueue> allocateResultSet = new HashSet<MessageQueue>();
+        allocateResultSet.add(new MessageQueue(topic, "BrokerA", 0));
+        allocateResultSet.add(new MessageQueue(topic, "BrokerA", 1));
+
+        rebalancePush.topicSubscribeInfoTable.put(topic, allocateResultSet);
+        rebalancePush.doRebalance(false);
+
+        ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = rebalancePush.getProcessQueueTable();
+        Assert.assertTrue(processQueueTable.size()==2);
+        MessageQueue queue = processQueueTable.keySet().iterator().next();
+        Assert.assertTrue(queue.getTopic().equals(topic));
+
+        HashMap<String, DowngradeConfig> downgradeConfigHashMap = new HashMap<String, DowngradeConfig>();
+        DowngradeConfig downgradeConfig2 = new DowngradeConfig();
+        downgradeConfig2.setDownTimeout(System.currentTimeMillis()+10000);
+        downgradeConfig2.setHostDownTimeout(new HashMap<String, Long>());
+        downgradeConfig2.getHostDownTimeout().put(new String(UtilAll.ipToIPv4Str(UtilAll.getIP())),System.currentTimeMillis()+1000000);
+        downgradeConfig2.setDowngradeEnable(true);
+        downgradeConfigHashMap.put(topic,downgradeConfig2);
+
+        ConcurrentHashMap<String, Map<String, DowngradeConfig>> configMap = new ConcurrentHashMap<String, Map<String, DowngradeConfig>>();
+        configMap.put(DowngradeUtils.genDowngradeKey(GroupType.CONSUMER,consumerGroup),downgradeConfigHashMap);
+        Field field = MQClientInstance.class.getDeclaredField("downgradeConfigTable");
+        field.setAccessible(true);
+        field.set(mqClientInstance, configMap);
+
+        doCallRealMethod().when(mqClientInstance).isDisabled(any(GroupType.class),anyString(),anyString(),anyString());
+
+        rebalancePush.doRebalance(false);
+        processQueueTable = rebalancePush.getProcessQueueTable();
+        Assert.assertTrue(processQueueTable.size()==0);
     }
 }

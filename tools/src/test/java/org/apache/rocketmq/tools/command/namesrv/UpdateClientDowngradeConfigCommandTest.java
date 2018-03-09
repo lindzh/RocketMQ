@@ -66,7 +66,7 @@ public class UpdateClientDowngradeConfigCommandTest extends BasicTimedKVTest{
         String printContent = getPrintContent();
         System.err.println(printContent);
         Assert.assertTrue(printContent.contains("success"));
-        String key = DowngradeUtils.genDowngradeKey(GroupType.CONSUMER, "consumer1", "topic10");
+        String key = DowngradeUtils.genDowngradeKey(GroupType.CONSUMER, "consumer1");
         Assert.assertTrue(timedConfigHashMap.get(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG).get(key).getValue().contains("downgradeEnable"));
         System.err.println(timedConfigHashMap.get(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG).get(key).getValue());
     }

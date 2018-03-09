@@ -32,6 +32,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.rocketmq.common.constant.GroupType;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageClientIDSetter;
@@ -441,6 +442,11 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.makeSureStateOK();
         Validators.checkMessage(msg, this.defaultMQProducer);
 
+        if (mQClientFactory.isDisabled(GroupType.PRODUCER, defaultMQProducer.getProducerGroup(), msg.getTopic(), mQClientFactory.getClientId())) {
+            throw new MQClientException("This topic is not allowed for send now because of DowngradeConfig, " + msg.getTopic() + FAQUrl.suggestTodo(FAQUrl.DOWNGRADE_FORBID_SEND),
+                null);
+        }
+
         final long invokeID = random.nextLong();
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
@@ -589,6 +595,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final SendCallback sendCallback,
         final TopicPublishInfo topicPublishInfo,
         final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+
+        if (mQClientFactory.isDisabled(GroupType.PRODUCER, defaultMQProducer.getProducerGroup(), msg.getTopic(), mQClientFactory.getClientId())) {
+            throw new MQClientException("This topic is not allowed for send now because of DowngradeConfig, " + msg.getTopic() + FAQUrl.suggestTodo(FAQUrl.DOWNGRADE_FORBID_SEND),
+                null);
+        }
+
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
             tryToFindTopicPublishInfo(mq.getTopic());

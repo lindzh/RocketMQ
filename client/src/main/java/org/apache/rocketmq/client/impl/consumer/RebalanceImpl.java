@@ -32,6 +32,7 @@ import org.apache.rocketmq.client.impl.FindBrokerResult;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
 import org.apache.rocketmq.client.log.ClientLogger;
 import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.constant.GroupType;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.body.LockBatchRequestBody;
@@ -238,11 +239,18 @@ public abstract class RebalanceImpl {
         return subscriptionInner;
     }
 
+    private boolean isConsumeDisabled(String topic, String cid) {
+        return this.mQClientFactory.isDisabled(GroupType.CONSUMER, consumerGroup, topic, cid);
+    }
+
     private void rebalanceByTopic(final String topic, final boolean isOrder) {
         switch (messageModel) {
             case BROADCASTING: {
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
                 if (mqSet != null) {
+                    if (isConsumeDisabled(topic, mQClientFactory.getClientId())) {
+                        mqSet = new HashSet<MessageQueue>();
+                    }
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, mqSet, isOrder);
                     if (changed) {
                         this.messageQueueChanged(topic, mqSet, mqSet);
@@ -265,9 +273,18 @@ public abstract class RebalanceImpl {
                         log.warn("doRebalance, {}, but the topic[{}] not exist.", consumerGroup, topic);
                     }
                 }
-
                 if (null == cidAll) {
                     log.warn("doRebalance, {} {}, get consumer id list failed", consumerGroup, topic);
+                }
+
+                if (cidAll != null) {
+                    ArrayList<String> newCidAll = new ArrayList<String>();
+                    for (String cid : cidAll) {
+                        if (!this.isConsumeDisabled(topic, cid)) {
+                            newCidAll.add(cid);
+                        }
+                    }
+                    cidAll = newCidAll;
                 }
 
                 if (mqSet != null && cidAll != null) {
@@ -280,16 +297,18 @@ public abstract class RebalanceImpl {
                     AllocateMessageQueueStrategy strategy = this.allocateMessageQueueStrategy;
 
                     List<MessageQueue> allocateResult = null;
-                    try {
-                        allocateResult = strategy.allocate(
-                            this.consumerGroup,
-                            this.mQClientFactory.getClientId(),
-                            mqAll,
-                            cidAll);
-                    } catch (Throwable e) {
-                        log.error("AllocateMessageQueueStrategy.allocate Exception. allocateMessageQueueStrategyName={}", strategy.getName(),
-                            e);
-                        return;
+                    if (!isConsumeDisabled(topic, this.mQClientFactory.getClientId())) {
+                        try {
+                            allocateResult = strategy.allocate(
+                                this.consumerGroup,
+                                this.mQClientFactory.getClientId(),
+                                mqAll,
+                                cidAll);
+                        } catch (Throwable e) {
+                            log.error("AllocateMessageQueueStrategy.allocate Exception. allocateMessageQueueStrategyName={}", strategy.getName(),
+                                e);
+                            return;
+                        }
                     }
 
                     Set<MessageQueue> allocateResultSet = new HashSet<MessageQueue>();

@@ -18,28 +18,45 @@
 package org.apache.rocketmq.common.downgrade;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
 import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.constant.GroupType;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
 public class DowngradeUtils {
 
-    public static DowngradeConfig fromTimedConfig(TimedConfig timedConfig) {
+    public static Map<String, DowngradeConfig> fromTimedConfig(TimedConfig timedConfig) {
         String value = timedConfig.getValue();
-        return JSON.parseObject(value, DowngradeConfig.class);
+        return JSON.parseObject(value, new TypeReference<Map<String, DowngradeConfig>>() {
+        });
     }
 
-    public static TimedConfig toTimedConfig(DowngradeConfig downgradeConfig) {
-        if (downgradeConfig == null || !downgradeConfig.isDowngradeEnable()) {
+    public static TimedConfig toTimedConfig(Map<String, DowngradeConfig> downgradeConfigTable) {
+        if (downgradeConfigTable == null || downgradeConfigTable.size() < 1) {
             return null;
         }
-        long maxTimeout = getMaxTimeout(downgradeConfig);
+        HashMap<String, DowngradeConfig> configTable = new HashMap<String, DowngradeConfig>();
+        long maxTimeout = 0;
+        Set<Map.Entry<String, DowngradeConfig>> entries = downgradeConfigTable.entrySet();
+        for (Map.Entry<String, DowngradeConfig> entry : entries) {
+            if (entry.getValue().isDowngradeEnable()) {
+                long actTimeout = getMaxTimeout(entry.getValue());
+                if (actTimeout > System.currentTimeMillis()) {
+                    configTable.put(entry.getKey(), entry.getValue());
+                }
+                maxTimeout = actTimeout > maxTimeout ? actTimeout : maxTimeout;
+            }
+        }
         if (maxTimeout < System.currentTimeMillis()) {
             return null;
         }
-        return new TimedConfig(JSON.toJSONString(downgradeConfig), maxTimeout);
+        if (configTable.size() < 1) {
+            return null;
+        }
+        return new TimedConfig(JSON.toJSONString(configTable), maxTimeout);
     }
 
     public static long getMaxTimeout(DowngradeConfig downgradeConfig) {
@@ -60,7 +77,7 @@ public class DowngradeUtils {
         return timeout;
     }
 
-    public static String genDowngradeKey(GroupType groupType, String group, String topic) {
-        return "%Downgrade%" + groupType.name() + "%" + group + "@" + topic;
+    public static String genDowngradeKey(GroupType groupType, String group) {
+        return "%Downgrade%" + groupType.name() + "%" + group;
     }
 }

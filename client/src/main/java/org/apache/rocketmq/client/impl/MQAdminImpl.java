@@ -18,8 +18,10 @@ package org.apache.rocketmq.client.impl;
 
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -423,9 +425,9 @@ public class MQAdminImpl {
         throw new MQClientException(ResponseCode.TOPIC_NOT_EXIST, "The topic[" + topic + "] not matched route info");
     }
 
-    public DowngradeConfig getDowngradeConfig(GroupType groupType, String group, String topic) throws RemotingException,
+    public Map<String,DowngradeConfig> getDowngradeConfig(GroupType groupType, String group) throws RemotingException,
         MQClientException, InterruptedException {
-        String key = DowngradeUtils.genDowngradeKey(groupType, group, topic);
+        String key = DowngradeUtils.genDowngradeKey(groupType, group);
         TimedConfig timedConfig = this.mQClientFactory.getMQClientAPIImpl()
             .getTimedKVConfigValue(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, key, timeoutMillis);
         if (timedConfig != null) {
@@ -435,6 +437,6 @@ public class MQAdminImpl {
                 throw new MQClientException("Convert TimedConfig to DowngradeConfig error", e);
             }
         }
-        return null;
+        return new HashMap<String, DowngradeConfig>();
     }
 }

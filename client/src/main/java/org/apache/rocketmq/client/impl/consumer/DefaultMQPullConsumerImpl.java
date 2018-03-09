@@ -45,6 +45,7 @@ import org.apache.rocketmq.client.log.ClientLogger;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.ServiceState;
 import org.apache.rocketmq.common.UtilAll;
+import org.apache.rocketmq.common.constant.GroupType;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.filter.FilterAPI;
 import org.apache.rocketmq.common.help.FAQUrl;
@@ -177,6 +178,11 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
 
         if (maxNums <= 0) {
             throw new MQClientException("maxNums <= 0", null);
+        }
+
+        if (mQClientFactory.isDisabled(GroupType.CONSUMER, this.defaultMQPullConsumer.getConsumerGroup(), mq.getTopic(), mQClientFactory.getClientId())) {
+            throw new MQClientException("This topic is not allowed for pull now because of DowngradeConfig, " + mq.getTopic() + FAQUrl.suggestTodo(FAQUrl.DOWNGRADE_FORBID_SEND),
+                null);
         }
 
         this.subscriptionAutomatically(mq.getTopic());
@@ -396,6 +402,11 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
 
         if (null == pullCallback) {
             throw new MQClientException("pullCallback is null", null);
+        }
+
+        if (mQClientFactory.isDisabled(GroupType.CONSUMER, this.defaultMQPullConsumer.getConsumerGroup(), mq.getTopic(), mQClientFactory.getClientId())) {
+            throw new MQClientException("This topic is not allowed for pull now because of DowngradeConfig, " + mq.getTopic() + FAQUrl.suggestTodo(FAQUrl.DOWNGRADE_FORBID_SEND),
+                null);
         }
 
         this.subscriptionAutomatically(mq.getTopic());

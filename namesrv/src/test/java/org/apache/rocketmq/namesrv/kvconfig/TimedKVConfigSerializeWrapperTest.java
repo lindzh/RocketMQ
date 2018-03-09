@@ -48,7 +48,6 @@ public class TimedKVConfigSerializeWrapperTest {
             new TimedConfig("timedKV config", System.currentTimeMillis()));
 
         DowngradeConfig downgradeConfig = new DowngradeConfig();
-        downgradeConfig.setTopic("topic1");
         downgradeConfig.setDownTimeout(System.currentTimeMillis());
         String downgradeConfigJson = JSON.toJSONString(downgradeConfig);
         timedKVConfigSerializeWrapper.getConfigTable().get("namespace2").put("downgrade",

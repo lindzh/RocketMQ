@@ -24,7 +24,9 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 import org.apache.rocketmq.client.ClientConfig;
+import org.apache.rocketmq.client.common.DowngradeBasicTest;
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.hook.SendMessageContext;
@@ -35,7 +37,9 @@ import org.apache.rocketmq.client.impl.MQClientManager;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
 import org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl;
 import org.apache.rocketmq.client.impl.producer.TopicPublishInfo;
+import org.apache.rocketmq.common.constant.GroupType;
 import org.apache.rocketmq.common.message.Message;
+import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.header.SendMessageRequestHeader;
 import org.apache.rocketmq.common.protocol.route.BrokerData;
 import org.apache.rocketmq.common.protocol.route.QueueData;
@@ -43,6 +47,7 @@ import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.netty.NettyRemotingClient;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -60,17 +65,21 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
-public class DefaultMQProducerTest {
+public class DefaultMQProducerTest extends DowngradeBasicTest{
     @Spy
     private MQClientInstance mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(new ClientConfig());
     @Mock
     private MQClientAPIImpl mQClientAPIImpl;
 
+    protected String topic = "FooBar";
+
     private DefaultMQProducer producer;
     private Message message;
     private Message zeroMsg;
-    private String topic = "FooBar";
+
     private String producerGroupPrefix = "FooBar_PID";
+
+
 
     @Before
     public void init() throws Exception {
@@ -97,6 +106,8 @@ public class DefaultMQProducerTest {
         when(mQClientAPIImpl.sendMessage(anyString(), anyString(), any(Message.class), any(SendMessageRequestHeader.class), anyLong(), any(CommunicationMode.class),
             nullable(SendCallback.class), nullable(TopicPublishInfo.class), nullable(MQClientInstance.class), anyInt(), nullable(SendMessageContext.class), any(DefaultMQProducerImpl.class)))
             .thenReturn(createSendResult(SendStatus.SEND_OK));
+
+        initDowngradeTest(mQClientFactory, GroupType.PRODUCER,producer.getProducerGroup());
     }
 
     @After
@@ -212,6 +223,71 @@ public class DefaultMQProducerTest {
             .getmQClientFactory().getMQClientAPIImpl().getRemotingClient();
 
         assertThat(remotingClient.getCallbackExecutor()).isEqualTo(customized);
+    }
+
+    @Test
+    public void testSendDowngradeTopic() {
+        try {
+            producer.send(new Message(topic, "simple test message".getBytes()));
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException ec = (MQClientException)e;
+            Assert.assertTrue(!ec.getErrorMessage().contains("DowngradeConfig"));
+        }
+
+        boolean hasException = false;
+        try {
+            producer.send(new Message(topic2, "simple test message".getBytes()));
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException ec = (MQClientException)e;
+            Assert.assertTrue(ec.getErrorMessage().contains("DowngradeConfig"));
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
+        hasException = false;
+        try {
+            producer.sendOneway(new Message(topic3, "simple test message".getBytes()));
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException ec = (MQClientException)e;
+            Assert.assertTrue(ec.getErrorMessage().contains("DowngradeConfig"));
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
+        hasException = false;
+        try {
+            producer.send(new Message(topic3, "simple test message".getBytes()),new MessageQueue(topic3,"broker1",0));
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException ec = (MQClientException)e;
+            Assert.assertTrue(ec.getErrorMessage().contains("DowngradeConfig"));
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
+        hasException = false;
+        try {
+            producer.send(new Message(topic3, "simple test message".getBytes()), new SendCallback() {
+                @Override
+                public void onSuccess(SendResult sendResult) {
+
+                }
+
+                @Override
+                public void onException(Throwable e) {
+                    Assert.assertTrue(e instanceof MQClientException);
+                }
+            });
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException ec = (MQClientException)e;
+            Assert.assertTrue(ec.getErrorMessage().contains("DowngradeConfig"));
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
     }
 
     public static TopicRouteData createTopicRoute() {

@@ -31,11 +31,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.rocketmq.client.ClientConfig;
 import org.apache.rocketmq.client.admin.MQAdminExtInner;
 import org.apache.rocketmq.client.exception.MQBrokerException;
@@ -60,8 +60,12 @@ import org.apache.rocketmq.client.stat.ConsumerStatsManager;
 import org.apache.rocketmq.common.MQVersion;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.ServiceState;
+import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.UtilAll;
+import org.apache.rocketmq.common.constant.GroupType;
 import org.apache.rocketmq.common.constant.PermName;
+import org.apache.rocketmq.common.downgrade.DowngradeConfig;
+import org.apache.rocketmq.common.downgrade.DowngradeUtils;
 import org.apache.rocketmq.common.filter.ExpressionType;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.message.MessageExt;
@@ -102,12 +106,10 @@ public class MQClientInstance {
         new ConcurrentHashMap<String, HashMap<Long, String>>();
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable =
         new ConcurrentHashMap<String, HashMap<String, Integer>>();
-    private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-        @Override
-        public Thread newThread(Runnable r) {
-            return new Thread(r, "MQClientFactoryScheduledThread");
-        }
-    });
+    private final ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(10, new ThreadFactoryImpl("MQClientFactoryScheduledThread_"));
+
+    private final ConcurrentHashMap<String,Map<String,DowngradeConfig>> downgradeConfigTable = new ConcurrentHashMap<String, Map<String, DowngradeConfig>>();
+
     private final ClientRemotingProcessor clientRemotingProcessor;
     private final PullMessageService pullMessageService;
     private final RebalanceService rebalanceService;
@@ -312,6 +314,18 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    MQClientInstance.this.updateDowngradeConfigFromNameServer();
+                } catch (Exception e) {
+                    log.error("ScheduledTask updateDowngradeConfigFromNameServer exception", e);
+                }
+            }
+        }, 10, this.clientConfig.getUpdateDowngradeConfigInterval(), TimeUnit.MILLISECONDS);
+
+        this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
+
+            @Override
+            public void run() {
+                try {
                     MQClientInstance.this.adjustThreadPool();
                 } catch (Exception e) {
                     log.error("ScheduledTask adjustThreadPool exception", e);
@@ -322,6 +336,66 @@ public class MQClientInstance {
 
     public String getClientId() {
         return clientId;
+    }
+
+    public boolean isDisabled(GroupType groupType, String group, String topic, String clientId) {
+        String downgradeKey = DowngradeUtils.genDowngradeKey(groupType, group);
+        Map<String, DowngradeConfig> downgradeConfigMap = this.downgradeConfigTable.get(downgradeKey);
+        if (downgradeConfigMap != null) {
+            DowngradeConfig downgradeConfig = downgradeConfigMap.get(topic);
+            if (downgradeConfig != null) {
+                if (downgradeConfig.isDowngradeEnable()) {
+                    if (downgradeConfig.getDownTimeout() > System.currentTimeMillis()) {
+                        return true;
+                    }
+
+                    Map<String, Long> hostDownTimeout = downgradeConfig.getHostDownTimeout();
+                    if (hostDownTimeout != null && clientId != null) {
+                        Set<Entry<String, Long>> entries = hostDownTimeout.entrySet();
+                        for (Entry<String, Long> entry : entries) {
+                            if (entry.getValue() > System.currentTimeMillis() && clientId.contains(entry.getKey())) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public void updateDowngradeConfigFromNameServer() {
+        HashSet<String> consumerGroups = new HashSet<String>();
+        Iterator<Entry<String, MQConsumerInner>> consumerIt = this.consumerTable.entrySet().iterator();
+        while (consumerIt.hasNext()) {
+            consumerGroups.add(consumerIt.next().getKey());
+        }
+
+        HashSet<String> producerGroups = new HashSet<String>();
+        Iterator<Entry<String, MQProducerInner>> producerIt = this.producerTable.entrySet().iterator();
+        while (producerIt.hasNext()) {
+            producerGroups.add(producerIt.next().getKey());
+        }
+
+        for (String consumerGroup : consumerGroups) {
+            try {
+                Map<String, DowngradeConfig> consumerDowngradeConfigTable = this.getMQAdminImpl().getDowngradeConfig(GroupType.CONSUMER, consumerGroup);
+                String downgradeKey = DowngradeUtils.genDowngradeKey(GroupType.CONSUMER, consumerGroup);
+                this.downgradeConfigTable.put(downgradeKey, consumerDowngradeConfigTable);
+            } catch (Exception e) {
+                log.info("getDowngrade from nameserver failed,consumer group {}", consumerGroup, e);
+            }
+        }
+
+        for (String producerGroup : producerGroups) {
+            try {
+                Map<String, DowngradeConfig> producerDowngradeConfigTable = this.getMQAdminImpl().getDowngradeConfig(GroupType.PRODUCER, producerGroup);
+                String downgradeKey = DowngradeUtils.genDowngradeKey(GroupType.PRODUCER, producerGroup);
+                this.downgradeConfigTable.put(downgradeKey, producerDowngradeConfigTable);
+            } catch (Exception e) {
+                log.info("getDowngrade from nameserver failed,producer group {}", producerGroup, e);
+            }
+        }
     }
 
     public void updateTopicRouteInfoFromNameServer() {

@@ -21,13 +21,17 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.apache.rocketmq.client.ClientConfig;
+import org.apache.rocketmq.client.common.DowngradeBasicTest;
+import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.impl.CommunicationMode;
 import org.apache.rocketmq.client.impl.FindBrokerResult;
 import org.apache.rocketmq.client.impl.MQClientAPIImpl;
 import org.apache.rocketmq.client.impl.MQClientManager;
+import org.apache.rocketmq.client.impl.consumer.DefaultMQPullConsumerImpl;
 import org.apache.rocketmq.client.impl.consumer.PullAPIWrapper;
 import org.apache.rocketmq.client.impl.consumer.PullResultExt;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
+import org.apache.rocketmq.common.constant.GroupType;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.header.PullMessageRequestHeader;
@@ -52,7 +56,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
-public class DefaultMQPullConsumerTest {
+public class DefaultMQPullConsumerTest extends DowngradeBasicTest {
     @Spy
     private MQClientInstance mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(new ClientConfig());
     @Mock
@@ -72,11 +76,17 @@ public class DefaultMQPullConsumerTest {
         field.setAccessible(true);
         field.set(pullAPIWrapper, mQClientFactory);
 
+        Field clientFactory = DefaultMQPullConsumerImpl.class.getDeclaredField("mQClientFactory");
+        clientFactory.setAccessible(true);
+        clientFactory.set(pullConsumer.getDefaultMQPullConsumerImpl(), mQClientFactory);
+
         field = MQClientInstance.class.getDeclaredField("mQClientAPIImpl");
         field.setAccessible(true);
-        field.set(mQClientFactory, mQClientAPIImpl);
+        field.set(this.mQClientFactory, mQClientAPIImpl);
 
-        when(mQClientFactory.findBrokerAddressInSubscribe(anyString(), anyLong(), anyBoolean())).thenReturn(new FindBrokerResult("127.0.0.1:10911", false));
+        when(this.mQClientFactory.findBrokerAddressInSubscribe(anyString(), anyLong(), anyBoolean())).thenReturn(new FindBrokerResult("127.0.0.1:10911", false));
+
+        initDowngradeTest(this.mQClientFactory, GroupType.CONSUMER,pullConsumer.getConsumerGroup());
     }
 
     @After
@@ -160,5 +170,74 @@ public class DefaultMQPullConsumerTest {
     private PullResultExt createPullResult(PullMessageRequestHeader requestHeader, PullStatus pullStatus,
         List<MessageExt> messageExtList) throws Exception {
         return new PullResultExt(pullStatus, requestHeader.getQueueOffset() + messageExtList.size(), 123, 2048, messageExtList, 0, new byte[] {});
+    }
+
+    @Test
+    public void testDowngradePullMessage(){
+        MessageQueue mq = new MessageQueue(topic2, "broker0", 0);
+        boolean hasException = false;
+        try {
+            pullConsumer.pull(mq,"*",0,32);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException mc = (MQClientException)e;
+            Assert.assertTrue(mc.getErrorMessage().contains("This topic is not allowed for pull now because of DowngradeConfig"));
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
+        hasException = false;
+        try {
+            pullConsumer.pull(mq, "*", 0, 32, new PullCallback() {
+                @Override
+                public void onSuccess(PullResult pullResult) {
+
+                }
+
+                @Override
+                public void onException(Throwable e) {
+
+                }
+            });
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException mc = (MQClientException)e;
+            Assert.assertTrue(mc.getErrorMessage().contains("This topic is not allowed for pull now because of DowngradeConfig"));
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
+        hasException = false;
+        try {
+            pullConsumer.pullBlockIfNotFound(mq,"*",0,32);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException mc = (MQClientException)e;
+            Assert.assertTrue(mc.getErrorMessage().contains("This topic is not allowed for pull now because of DowngradeConfig"));
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
+        hasException = false;
+        try {
+            pullConsumer.pullBlockIfNotFound(mq, "*", 0, 32, new PullCallback() {
+                @Override
+                public void onSuccess(PullResult pullResult) {
+
+                }
+
+                @Override
+                public void onException(Throwable e) {
+
+                }
+            });
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MQClientException);
+            MQClientException mc = (MQClientException)e;
+            Assert.assertTrue(mc.getErrorMessage().contains("This topic is not allowed for pull now because of DowngradeConfig"));
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
     }
 }

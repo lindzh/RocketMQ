@@ -1031,10 +1031,10 @@ public class DefaultMQAdminExtImpl implements MQAdminExt, MQAdminExtInner {
     }
 
     @Override
-    public DowngradeConfig getDowngradeConfig(GroupType groupType, String group, String topic) throws RemotingException,
+    public Map<String,DowngradeConfig> getDowngradeConfig(GroupType groupType, String group) throws RemotingException,
         MQClientException, InterruptedException {
 
-        String key = DowngradeUtils.genDowngradeKey(groupType, group, topic);
+        String key = DowngradeUtils.genDowngradeKey(groupType, group);
         TimedConfig timedConfig = this.mqClientInstance.getMQClientAPIImpl()
             .getTimedKVConfigValue(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, key, timeoutMillis);
         if (timedConfig != null) {
@@ -1048,15 +1048,10 @@ public class DefaultMQAdminExtImpl implements MQAdminExt, MQAdminExtInner {
     }
 
     @Override
-    public void updateDowngradeConfig(GroupType groupType, String group, String topic, DowngradeConfig downgradeConfig)
+    public void updateDowngradeConfig(GroupType groupType, String group, Map<String,DowngradeConfig> downgradeConfigTable)
         throws RemotingException, MQClientException, InterruptedException {
-        String key = DowngradeUtils.genDowngradeKey(groupType, group, topic);
-        TimedConfig config = null;
-        try {
-            config = DowngradeUtils.toTimedConfig(downgradeConfig);
-        } catch (Exception e) {
-            throw new MQClientException("Convert DowngradeConfig to TimedConfig error", e);
-        }
+        String key = DowngradeUtils.genDowngradeKey(groupType, group);
+        TimedConfig config = DowngradeUtils.toTimedConfig(downgradeConfigTable);
         if (config != null) {
             this.putTimedKVConfig(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, key, config);
         } else {

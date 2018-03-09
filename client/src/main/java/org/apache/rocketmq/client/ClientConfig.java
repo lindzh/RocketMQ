@@ -42,6 +42,12 @@ public class ClientConfig {
      * Offset persistent interval for consumer
      */
     private int persistConsumerOffsetInterval = 1000 * 5;
+
+    /**
+     * Downgrade config update interval
+     */
+    private int updateDowngradeConfigInterval = 1000 * 30;
+
     private boolean unitMode = false;
     private String unitName;
     private boolean vipChannelEnabled = Boolean.parseBoolean(System.getProperty(SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY, "true"));
@@ -107,6 +113,7 @@ public class ClientConfig {
         cc.pollNameServerInterval = pollNameServerInterval;
         cc.heartbeatBrokerInterval = heartbeatBrokerInterval;
         cc.persistConsumerOffsetInterval = persistConsumerOffsetInterval;
+        cc.updateDowngradeConfigInterval = updateDowngradeConfigInterval;
         cc.unitMode = unitMode;
         cc.unitName = unitName;
         cc.vipChannelEnabled = vipChannelEnabled;
@@ -152,6 +159,14 @@ public class ClientConfig {
 
     public void setPersistConsumerOffsetInterval(int persistConsumerOffsetInterval) {
         this.persistConsumerOffsetInterval = persistConsumerOffsetInterval;
+    }
+
+    public int getUpdateDowngradeConfigInterval() {
+        return updateDowngradeConfigInterval;
+    }
+
+    public void setUpdateDowngradeConfigInterval(int updateDowngradeConfigInterval) {
+        this.updateDowngradeConfigInterval = updateDowngradeConfigInterval;
     }
 
     public String getUnitName() {

@@ -542,14 +542,14 @@ public class DefaultMQAdminExt extends ClientConfig implements MQAdminExt {
     }
 
     @Override
-    public DowngradeConfig getDowngradeConfig(GroupType groupType, String group, String topic) throws RemotingException,
+    public Map<String, DowngradeConfig> getDowngradeConfig(GroupType groupType, String group) throws RemotingException,
         MQClientException, InterruptedException {
-        return this.defaultMQAdminExtImpl.getDowngradeConfig(groupType, group, topic);
+        return this.defaultMQAdminExtImpl.getDowngradeConfig(groupType, group);
     }
 
     @Override
-    public void updateDowngradeConfig(GroupType groupType, String group, String topic, DowngradeConfig downgradeConfig)
+    public void updateDowngradeConfig(GroupType groupType, String group, Map<String, DowngradeConfig> downgradeConfigTable)
         throws RemotingException, MQClientException, InterruptedException {
-        this.defaultMQAdminExtImpl.updateDowngradeConfig(groupType, group, topic, downgradeConfig);
+        this.defaultMQAdminExtImpl.updateDowngradeConfig(groupType, group, downgradeConfigTable);
     }
 }

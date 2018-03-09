@@ -446,23 +446,25 @@ public class DefaultMQAdminExtTest extends BasicTimedKVTest {
     public void testDowngrade() throws RemotingException, MQClientException, InterruptedException {
         long maxTime = System.currentTimeMillis() + 10000;
 
+        HashMap<String, DowngradeConfig> downgradeConfigMap = new HashMap<>();
         DowngradeConfig downgradeConfig = new DowngradeConfig();
         downgradeConfig.setDownTimeout(System.currentTimeMillis());
-        downgradeConfig.setTopic("simple");
         downgradeConfig.setDowngradeEnable(true);
 
         downgradeConfig.setHostDownTimeout(new HashMap<String, Long>());
         downgradeConfig.getHostDownTimeout().put("host1", maxTime);
-        defaultMQAdminExt.updateDowngradeConfig(GroupType.PRODUCER, "sender1", "topic1", downgradeConfig);
+        downgradeConfigMap.put("topic1",downgradeConfig);
 
-        String key = DowngradeUtils.genDowngradeKey(GroupType.PRODUCER, "sender1", "topic1");
+        defaultMQAdminExt.updateDowngradeConfig(GroupType.PRODUCER, "sender1", downgradeConfigMap);
+
+        String key = DowngradeUtils.genDowngradeKey(GroupType.PRODUCER, "sender1");
         TimedConfig timedKVConfig = defaultMQAdminExt.getTimedKVConfig(NamesrvUtil.TIMED_NAMESPACE_CLIENT_DOWNGRADE_CONFIG, key);
         assertThat(timedKVConfig.getValue()).contains("simple");
         assertThat(timedKVConfig.getTimeout()).isEqualTo(maxTime);
 
-        DowngradeConfig downgradeConfig1 = defaultMQAdminExt.getDowngradeConfig(GroupType.PRODUCER, "sender1", "topic1");
+        Map<String, DowngradeConfig> downgradeConfigMap1 = defaultMQAdminExt.getDowngradeConfig(GroupType.PRODUCER, "sender1");
+        DowngradeConfig downgradeConfig1 = downgradeConfigMap1.get("topic1");
         assertThat(downgradeConfig.getHostDownTimeout().size()).isEqualTo(downgradeConfig1.getHostDownTimeout().size());
-        assertThat(downgradeConfig.getTopic()).isEqualTo(downgradeConfig1.getTopic());
         assertThat(downgradeConfig.isDowngradeEnable()).isEqualTo(downgradeConfig1.isDowngradeEnable());
     }
 }

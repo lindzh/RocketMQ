@@ -277,10 +277,10 @@ public interface MQAdminExt extends MQAdmin {
     TimedKVTable getTimedKVListByNamespace(
         final String namespace) throws RemotingException, MQClientException, InterruptedException;
 
-    DowngradeConfig getDowngradeConfig(GroupType groupType, String group, String topic) throws RemotingException, MQClientException,
+    Map<String, DowngradeConfig> getDowngradeConfig(GroupType groupType, String group) throws RemotingException, MQClientException,
         InterruptedException;
 
-    void updateDowngradeConfig(GroupType groupType, String group, String topic,DowngradeConfig downgradeConfig)throws RemotingException,
+    void updateDowngradeConfig(GroupType groupType, String group, Map<String, DowngradeConfig> downgradeConfig) throws RemotingException,
         MQClientException, InterruptedException;
 
 }

@@ -40,6 +40,9 @@ public class FAQUrl {
     public static final String NO_TOPIC_ROUTE_INFO =
         "http://rocketmq.apache.org/docs/faq/";
 
+    public static final String DOWNGRADE_FORBID_SEND =
+        "http://rocketmq.apache.org/docs/faq/";
+
     public static final String LOAD_JSON_EXCEPTION =
         "http://rocketmq.apache.org/docs/faq/";
 

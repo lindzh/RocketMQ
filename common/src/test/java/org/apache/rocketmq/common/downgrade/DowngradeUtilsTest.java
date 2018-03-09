@@ -24,44 +24,45 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
+import java.util.Map;
 
 public class DowngradeUtilsTest {
 
-    private DowngradeConfig downgradeConfig;
+    private Map<String,DowngradeConfig> downgradeConfigTable = new HashMap<String, DowngradeConfig>();
     private long maxTime;
 
     @Before
     public void init() {
         maxTime = System.currentTimeMillis() + 10000;
 
-        downgradeConfig = new DowngradeConfig();
+        DowngradeConfig downgradeConfig = new DowngradeConfig();
         downgradeConfig.setDownTimeout(System.currentTimeMillis());
-        downgradeConfig.setTopic("simple");
         downgradeConfig.setDowngradeEnable(true);
 
         downgradeConfig.setHostDownTimeout(new HashMap<String, Long>());
         downgradeConfig.getHostDownTimeout().put("host1", maxTime);
+        downgradeConfigTable.put("simple",downgradeConfig);
     }
 
     @Test
     public void testConvertTimedConfig() {
-        TimedConfig timedConfig = DowngradeUtils.toTimedConfig(downgradeConfig);
+        TimedConfig timedConfig = DowngradeUtils.toTimedConfig(downgradeConfigTable);
         Assert.assertTrue(timedConfig != null);
         Assert.assertTrue(timedConfig.getTimeout() == maxTime);
     }
 
     @Test
     public void testMaxTimeout() {
-        long maxTimeout = DowngradeUtils.getMaxTimeout(downgradeConfig);
+        long maxTimeout = DowngradeUtils.getMaxTimeout(downgradeConfigTable.get("simple"));
         Assert.assertTrue(maxTimeout == this.maxTime);
     }
 
     @Test
     public void testConvertDowngradeConfig() {
-        TimedConfig timedConfig = DowngradeUtils.toTimedConfig(downgradeConfig);
-        DowngradeConfig downgradeConfig = DowngradeUtils.fromTimedConfig(timedConfig);
+        TimedConfig timedConfig = DowngradeUtils.toTimedConfig(downgradeConfigTable);
+        Map<String, DowngradeConfig> downgradeConfigMap = DowngradeUtils.fromTimedConfig(timedConfig);
+        DowngradeConfig downgradeConfig = downgradeConfigMap.get("simple");
         Assert.assertTrue(downgradeConfig.getHostDownTimeout().size() > 0);
         Assert.assertTrue(downgradeConfig.isDowngradeEnable());
-        Assert.assertTrue(downgradeConfig.getTopic().equals("simple"));
     }
 }

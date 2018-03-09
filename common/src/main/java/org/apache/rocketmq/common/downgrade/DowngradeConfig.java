@@ -22,8 +22,6 @@ import java.util.Map;
 
 public class DowngradeConfig {
 
-    private String topic;
-
     private boolean downgradeEnable;
 
     private long downTimeout;
@@ -35,27 +33,17 @@ public class DowngradeConfig {
         this.downgradeEnable = true;
     }
 
-    public DowngradeConfig(String topic, long downTimeout) {
+    public DowngradeConfig(long downTimeout) {
         this();
-        this.topic = topic;
         this.downTimeout = downTimeout;
     }
 
-    public DowngradeConfig(String topic, String host, long downTimeout) {
+    public DowngradeConfig(String host, long downTimeout) {
         this();
-        this.topic = topic;
         hostDownTimeout = new HashMap<String, Long>();
         if (host != null && downTimeout > System.currentTimeMillis()) {
             hostDownTimeout.put(host, downTimeout);
         }
-    }
-
-    public String getTopic() {
-        return topic;
-    }
-
-    public void setTopic(String topic) {
-        this.topic = topic;
     }
 
     public boolean isDowngradeEnable() {
