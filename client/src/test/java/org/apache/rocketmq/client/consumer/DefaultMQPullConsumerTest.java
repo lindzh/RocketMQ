@@ -20,6 +20,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import org.apache.rocketmq.client.ClientConfig;
 import org.apache.rocketmq.client.common.DowngradeBasicTest;
 import org.apache.rocketmq.client.exception.MQClientException;
@@ -62,13 +63,13 @@ public class DefaultMQPullConsumerTest extends DowngradeBasicTest {
     @Mock
     private MQClientAPIImpl mQClientAPIImpl;
     private DefaultMQPullConsumer pullConsumer;
-    private String consumerGroup = "FooBarGroup";
     private String topic = "FooBar";
     private String brokerName = "BrokerA";
 
     @Before
     public void init() throws Exception {
-        pullConsumer = new DefaultMQPullConsumer(consumerGroup);
+        String group = "group"+new Random().nextInt();
+        pullConsumer = new DefaultMQPullConsumer(group);
         pullConsumer.setNamesrvAddr("127.0.0.1:9876");
         pullConsumer.start();
         PullAPIWrapper pullAPIWrapper = pullConsumer.getDefaultMQPullConsumerImpl().getPullAPIWrapper();
