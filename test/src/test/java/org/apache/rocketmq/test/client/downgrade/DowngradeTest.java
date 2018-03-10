@@ -61,48 +61,39 @@ public class DowngradeTest extends BaseConf {
 
     private Set<MessageQueue> mqDivided;
 
-    private boolean pullUpdated = false;
-
     private AtomicBoolean received = new AtomicBoolean(false);
 
     @Before
     public void init() throws MQClientException {
+        System.setProperty("rocketmq.client.rebalance.waitInterval","500");
         producer =  new DefaultMQProducer("downgradeProducer");
-        producer.setUpdateDowngradeConfigInterval(500);
+        producer.setUpdateDowngradeConfigInterval(100);
         producer.setNamesrvAddr(nsAddr);
         producer.setInstanceName("producer");
         producer.start();
 
         initTopic();
 
-
-
         pullConsumer = new DefaultMQPullConsumer("downgradePullConsumer");
         pullConsumer.setNamesrvAddr(nsAddr);
         pullConsumer.setInstanceName("pullConsumer");
         pullConsumer.setMessageModel(MessageModel.CLUSTERING);
+        pullConsumer.registerMessageQueueListener(downgradeTopic, null);
         pullConsumer.setMessageQueueListener(new MessageQueueListener() {
             @Override
             public void messageQueueChanged(String topic, Set<MessageQueue> mqAll, Set<MessageQueue> mqDivided) {
                 System.out.println("-------messageQueueChanged-------");
-                if(DowngradeTest.this.mqDivided!=mqDivided){
-                    if(mqDivided==null){
-                        DowngradeTest.this.mqDivided = mqDivided;
-                    }else{
-                        if(DowngradeTest.this.mqDivided!=null&&DowngradeTest.this.mqDivided.size()>0&&mqDivided==null||mqDivided.size()==0){
-                            pullUpdated = true;
-                        }
-                    }
-                }
+                DowngradeTest.this.mqDivided = mqDivided;
             }
         });
-        pullConsumer.setUpdateDowngradeConfigInterval(500);
+        pullConsumer.setUpdateDowngradeConfigInterval(100);
         pullConsumer.start();
         pullConsumer.fetchSubscribeMessageQueues(downgradeTopic);
 
         pushConsumer = new DefaultMQPushConsumer("downgradePushConsumer");
         pushConsumer.setNamesrvAddr(nsAddr);
         pushConsumer.setInstanceName("pushConsumer");
+        pushConsumer.setPullInterval(100);
         pushConsumer.setMessageModel(MessageModel.CLUSTERING);
         pushConsumer.subscribe(downgradeTopic,"*");
         pushConsumer.registerMessageListener(new MessageListenerConcurrently() {
@@ -112,18 +103,8 @@ public class DowngradeTest extends BaseConf {
                 return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
             }
         });
-        pushConsumer.setUpdateDowngradeConfigInterval(500);
+        pushConsumer.setUpdateDowngradeConfigInterval(100);
         pushConsumer.start();
-    }
-
-    private ConcurrentHashMap<String,Map<String,DowngradeConfig>> getProducerDowngradeCache(DefaultMQProducer producer) throws NoSuchFieldException, IllegalAccessException {
-        DefaultMQProducerImpl defaultMQProducerImpl = producer.getDefaultMQProducerImpl();
-        Field mQClientFactoryField = DefaultMQProducerImpl.class.getDeclaredField("mQClientFactory");
-        mQClientFactoryField.setAccessible(true);
-        Object mQClientFactory = mQClientFactoryField.get(producer);
-        Field downgradeConfigTableField = MQClientInstance.class.getDeclaredField("downgradeConfigTable");
-        downgradeConfigTableField.setAccessible(true);
-        return (ConcurrentHashMap<String,Map<String,DowngradeConfig>>)downgradeConfigTableField.get(mQClientFactory);
     }
 
     @Test
@@ -148,7 +129,7 @@ public class DowngradeTest extends BaseConf {
             hasException = true;
         }
         Assert.assertTrue(hasException);
-//        Assert.assertTrue(mqDivided.size()>0);
+        Assert.assertTrue(mqDivided.size()>0);
         Assert.assertTrue(received.get());
 
         disableDowngrade(GroupType.PRODUCER,producer.getProducerGroup());
@@ -161,23 +142,27 @@ public class DowngradeTest extends BaseConf {
             DowngradeUtils.genDowngradeKey(GroupType.PRODUCER, producer.getProducerGroup()));
         Assert.assertTrue(timedKVConfig==null);
 
-        Thread.sleep(3000);
+        Thread.sleep(1000);
 
         received.set(false);
-//        Assert.assertTrue(mqDivided.size()==0);
+        Assert.assertTrue(mqDivided==null||mqDivided.size()==0);
 
         producer.send(new Message(downgradeTopic,("message test "+System.currentTimeMillis()).getBytes()));
         producer.send(new Message(downgradeTopic,("message test "+System.currentTimeMillis()).getBytes()));
         producer.send(new Message(downgradeTopic,("message test "+System.currentTimeMillis()).getBytes()));
 
-//        Assert.assertTrue(mqDivided.size()==0);
+        Thread.sleep(1000);
+        Assert.assertTrue(mqDivided.size()==0);
         Assert.assertTrue(!received.get());
 
         disableDowngrade(GroupType.CONSUMER,pullConsumer.getConsumerGroup());
         disableDowngrade(GroupType.CONSUMER,pushConsumer.getConsumerGroup());
-        Thread.sleep(2000);
+        producer.send(new Message(downgradeTopic,("message test "+System.currentTimeMillis()).getBytes()));
+        producer.send(new Message(downgradeTopic,("message test "+System.currentTimeMillis()).getBytes()));
+        producer.send(new Message(downgradeTopic,("message test "+System.currentTimeMillis()).getBytes()));
+        Thread.sleep(1000);
 
-//        Assert.assertTrue(mqDivided.size()>0);
+        Assert.assertTrue(mqDivided.size()>0);
         Assert.assertTrue(received.get());
     }
 
