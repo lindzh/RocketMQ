@@ -25,12 +25,9 @@ import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
-import org.apache.rocketmq.client.impl.factory.MQClientInstance;
-import org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.common.TimedConfig;
 import org.apache.rocketmq.common.constant.GroupType;
-import org.apache.rocketmq.common.downgrade.DowngradeConfig;
 import org.apache.rocketmq.common.downgrade.DowngradeUtils;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageExt;
@@ -44,14 +41,11 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.lang.reflect.Field;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class DowngradeTest extends BaseConf {
+public class DowngradeTestIT extends BaseConf {
 
     private DefaultMQProducer producer;
 
@@ -83,7 +77,7 @@ public class DowngradeTest extends BaseConf {
             @Override
             public void messageQueueChanged(String topic, Set<MessageQueue> mqAll, Set<MessageQueue> mqDivided) {
                 System.out.println("-------messageQueueChanged-------");
-                DowngradeTest.this.mqDivided = mqDivided;
+                DowngradeTestIT.this.mqDivided = mqDivided;
             }
         });
         pullConsumer.setUpdateDowngradeConfigInterval(100);
