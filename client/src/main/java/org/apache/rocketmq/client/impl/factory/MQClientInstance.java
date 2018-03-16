@@ -63,6 +63,7 @@ import org.apache.rocketmq.common.ServiceState;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.constant.PermName;
 import org.apache.rocketmq.common.filter.ExpressionType;
+import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.body.ConsumeMessageDirectlyResult;
@@ -80,11 +81,10 @@ import org.apache.rocketmq.remoting.common.RemotingHelper;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
-import org.slf4j.Logger;
 
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
-    private final Logger log = ClientLogger.getLog();
+    private final InternalLogger log = ClientLogger.getLog();
     private final ClientConfig clientConfig;
     private final int instanceIndex;
     private final String clientId;
@@ -975,7 +975,6 @@ public class MQClientInstance {
 
         HashMap<Long/* brokerId */, String/* address */> map = this.brokerAddrTable.get(brokerName);
         if (map != null && !map.isEmpty()) {
-            FOR_SEG:
             for (Map.Entry<Long, String> entry : map.entrySet()) {
                 Long id = entry.getKey();
                 brokerAddr = entry.getValue();
@@ -983,7 +982,6 @@ public class MQClientInstance {
                     found = true;
                     if (MixAll.MASTER_ID == id) {
                         slave = false;
-                        break FOR_SEG;
                     } else {
                         slave = true;
                     }

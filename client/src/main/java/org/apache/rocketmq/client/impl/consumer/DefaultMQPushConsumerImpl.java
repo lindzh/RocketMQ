@@ -56,6 +56,7 @@ import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.filter.FilterAPI;
 import org.apache.rocketmq.common.help.FAQUrl;
+import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageAccessor;
 import org.apache.rocketmq.common.message.MessageConst;
@@ -74,7 +75,6 @@ import org.apache.rocketmq.common.sysflag.PullSysFlag;
 import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
 import org.apache.rocketmq.remoting.exception.RemotingException;
-import org.slf4j.Logger;
 
 public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     /**
@@ -91,7 +91,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     private static final long PULL_TIME_DELAY_MILLS_WHEN_SUSPEND = 1000;
     private static final long BROKER_SUSPEND_MAX_TIME_MILLIS = 1000 * 15;
     private static final long CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND = 1000 * 30;
-    private final Logger log = ClientLogger.getLog();
+    private final InternalLogger log = ClientLogger.getLog();
     private final DefaultMQPushConsumer defaultMQPushConsumer;
     private final RebalanceImpl rebalanceImpl = new RebalancePushImpl(this);
     private final ArrayList<FilterMessageHook> filterMessageHookList = new ArrayList<FilterMessageHook>();
@@ -711,8 +711,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
         // consumeThreadMin
         if (this.defaultMQPushConsumer.getConsumeThreadMin() < 1
-            || this.defaultMQPushConsumer.getConsumeThreadMin() > 1000
-            || this.defaultMQPushConsumer.getConsumeThreadMin() > this.defaultMQPushConsumer.getConsumeThreadMax()) {
+            || this.defaultMQPushConsumer.getConsumeThreadMin() > 1000) {
             throw new MQClientException(
                 "consumeThreadMin Out of range [1, 1000]"
                     + FAQUrl.suggestTodo(FAQUrl.CLIENT_PARAMETER_CHECK_URL),
@@ -724,6 +723,14 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             throw new MQClientException(
                 "consumeThreadMax Out of range [1, 1000]"
                     + FAQUrl.suggestTodo(FAQUrl.CLIENT_PARAMETER_CHECK_URL),
+                null);
+        }
+
+        // consumeThreadMin can't be larger than consumeThreadMax
+        if (this.defaultMQPushConsumer.getConsumeThreadMin() > this.defaultMQPushConsumer.getConsumeThreadMax()) {
+            throw new MQClientException(
+                "consumeThreadMin (" + this.defaultMQPushConsumer.getConsumeThreadMin() + ") "
+                    + "is larger than consumeThreadMax (" + this.defaultMQPushConsumer.getConsumeThreadMax() + ")",
                 null);
         }
 

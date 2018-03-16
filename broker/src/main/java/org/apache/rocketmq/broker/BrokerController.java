@@ -67,17 +67,22 @@ import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.constant.PermName;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.common.namesrv.RegisterBrokerResult;
 import org.apache.rocketmq.common.protocol.RequestCode;
 import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
 import org.apache.rocketmq.common.stats.MomentStatsItem;
 import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.RemotingServer;
+import org.apache.rocketmq.remoting.common.TlsMode;
 import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.netty.NettyRemotingServer;
 import org.apache.rocketmq.remoting.netty.NettyRequestProcessor;
 import org.apache.rocketmq.remoting.netty.NettyServerConfig;
 import org.apache.rocketmq.remoting.netty.RequestTask;
+import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
+import org.apache.rocketmq.srvutil.FileWatchService;
 import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.MessageArrivingListener;
 import org.apache.rocketmq.store.MessageStore;
@@ -85,13 +90,11 @@ import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.stats.BrokerStats;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class BrokerController {
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
-    private static final Logger LOG_PROTECTION = LoggerFactory.getLogger(LoggerName.PROTECTION_LOGGER_NAME);
-    private static final Logger LOG_WATER_MARK = LoggerFactory.getLogger(LoggerName.WATER_MARK_LOGGER_NAME);
+    private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
+    private static final InternalLogger LOG_PROTECTION = InternalLoggerFactory.getLogger(LoggerName.PROTECTION_LOGGER_NAME);
+    private static final InternalLogger LOG_WATER_MARK = InternalLoggerFactory.getLogger(LoggerName.WATER_MARK_LOGGER_NAME);
     private final BrokerConfig brokerConfig;
     private final NettyServerConfig nettyServerConfig;
     private final NettyClientConfig nettyClientConfig;
@@ -114,6 +117,7 @@ public class BrokerController {
     private final SlaveSynchronize slaveSynchronize;
     private final BlockingQueue<Runnable> sendThreadPoolQueue;
     private final BlockingQueue<Runnable> pullThreadPoolQueue;
+    private final BlockingQueue<Runnable> queryThreadPoolQueue;
     private final BlockingQueue<Runnable> clientManagerThreadPoolQueue;
     private final BlockingQueue<Runnable> consumerManagerThreadPoolQueue;
     private final FilterServerManager filterServerManager;
@@ -126,6 +130,7 @@ public class BrokerController {
     private TopicConfigManager topicConfigManager;
     private ExecutorService sendMessageExecutor;
     private ExecutorService pullMessageExecutor;
+    private ExecutorService queryMessageExecutor;
     private ExecutorService adminBrokerExecutor;
     private ExecutorService clientManageExecutor;
     private ExecutorService consumerManageExecutor;
@@ -134,6 +139,7 @@ public class BrokerController {
     private InetSocketAddress storeHost;
     private BrokerFastFailure brokerFastFailure;
     private Configuration configuration;
+    private FileWatchService fileWatchService;
 
     public BrokerController(
         final BrokerConfig brokerConfig,
@@ -163,8 +169,8 @@ public class BrokerController {
         this.slaveSynchronize = new SlaveSynchronize(this);
 
         this.sendThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getSendThreadPoolQueueCapacity());
-
         this.pullThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getPullThreadPoolQueueCapacity());
+        this.queryThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getQueryThreadPoolQueueCapacity());
         this.clientManagerThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getClientManagerThreadPoolQueueCapacity());
         this.consumerManagerThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getConsumerManagerThreadPoolQueueCapacity());
 
@@ -189,6 +195,10 @@ public class BrokerController {
 
     public BlockingQueue<Runnable> getPullThreadPoolQueue() {
         return pullThreadPoolQueue;
+    }
+
+    public BlockingQueue<Runnable> getQueryThreadPoolQueue() {
+        return queryThreadPoolQueue;
     }
 
     public boolean initialize() throws CloneNotSupportedException {
@@ -236,6 +246,14 @@ public class BrokerController {
                 TimeUnit.MILLISECONDS,
                 this.pullThreadPoolQueue,
                 new ThreadFactoryImpl("PullMessageThread_"));
+
+            this.queryMessageExecutor = new BrokerFixedThreadPoolExecutor(
+                this.brokerConfig.getQueryMessageThreadPoolNums(),
+                this.brokerConfig.getQueryMessageThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                this.queryThreadPoolQueue,
+                new ThreadFactoryImpl("QueryMessageThread_"));
 
             this.adminBrokerExecutor =
                 Executors.newFixedThreadPool(this.brokerConfig.getAdminBrokerThreadPoolNums(), new ThreadFactoryImpl(
@@ -373,6 +391,45 @@ public class BrokerController {
                     }
                 }, 1000 * 10, 1000 * 60, TimeUnit.MILLISECONDS);
             }
+
+            if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
+                // Register a listener to reload SslContext
+                try {
+                    fileWatchService = new FileWatchService(
+                        new String[] {
+                            TlsSystemConfig.tlsServerCertPath,
+                            TlsSystemConfig.tlsServerKeyPath,
+                            TlsSystemConfig.tlsServerTrustCertPath
+                        },
+                        new FileWatchService.Listener() {
+                            boolean certChanged, keyChanged = false;
+                            @Override
+                            public void onChanged(String path) {
+                                if (path.equals(TlsSystemConfig.tlsServerTrustCertPath)) {
+                                    log.info("The trust certificate changed, reload the ssl context");
+                                    reloadServerSslContext();
+                                }
+                                if (path.equals(TlsSystemConfig.tlsServerCertPath)) {
+                                    certChanged = true;
+                                }
+                                if (path.equals(TlsSystemConfig.tlsServerKeyPath)) {
+                                    keyChanged = true;
+                                }
+                                if (certChanged && keyChanged) {
+                                    log.info("The certificate and private key changed, reload the ssl context");
+                                    certChanged = keyChanged = false;
+                                    reloadServerSslContext();
+                                }
+                            }
+                            private void reloadServerSslContext() {
+                                ((NettyRemotingServer) remotingServer).loadSslContext();
+                                ((NettyRemotingServer) fastRemotingServer).loadSslContext();
+                            }
+                        });
+                } catch (Exception e) {
+                    log.warn("FileWatchService created error, can't load the certificate dynamically");
+                }
+            }
         }
 
         return result;
@@ -404,11 +461,11 @@ public class BrokerController {
          * QueryMessageProcessor
          */
         NettyRequestProcessor queryProcessor = new QueryMessageProcessor(this);
-        this.remotingServer.registerProcessor(RequestCode.QUERY_MESSAGE, queryProcessor, this.pullMessageExecutor);
-        this.remotingServer.registerProcessor(RequestCode.VIEW_MESSAGE_BY_ID, queryProcessor, this.pullMessageExecutor);
+        this.remotingServer.registerProcessor(RequestCode.QUERY_MESSAGE, queryProcessor, this.queryMessageExecutor);
+        this.remotingServer.registerProcessor(RequestCode.VIEW_MESSAGE_BY_ID, queryProcessor, this.queryMessageExecutor);
 
-        this.fastRemotingServer.registerProcessor(RequestCode.QUERY_MESSAGE, queryProcessor, this.pullMessageExecutor);
-        this.fastRemotingServer.registerProcessor(RequestCode.VIEW_MESSAGE_BY_ID, queryProcessor, this.pullMessageExecutor);
+        this.fastRemotingServer.registerProcessor(RequestCode.QUERY_MESSAGE, queryProcessor, this.queryMessageExecutor);
+        this.fastRemotingServer.registerProcessor(RequestCode.VIEW_MESSAGE_BY_ID, queryProcessor, this.queryMessageExecutor);
 
         /**
          * ClientManageProcessor
@@ -494,9 +551,14 @@ public class BrokerController {
         return this.headSlowTimeMills(this.pullThreadPoolQueue);
     }
 
+    public long headSlowTimeMills4QueryThreadPoolQueue() {
+        return this.headSlowTimeMills(this.queryThreadPoolQueue);
+    }
+
     public void printWaterMark() {
         LOG_WATER_MARK.info("[WATERMARK] Send Queue Size: {} SlowTimeMills: {}", this.sendThreadPoolQueue.size(), headSlowTimeMills4SendThreadPoolQueue());
         LOG_WATER_MARK.info("[WATERMARK] Pull Queue Size: {} SlowTimeMills: {}", this.pullThreadPoolQueue.size(), headSlowTimeMills4PullThreadPoolQueue());
+        LOG_WATER_MARK.info("[WATERMARK] Query Queue Size: {} SlowTimeMills: {}", this.queryThreadPoolQueue.size(), headSlowTimeMills4QueryThreadPoolQueue());
     }
 
     public MessageStore getMessageStore() {
@@ -575,6 +637,10 @@ public class BrokerController {
             this.fastRemotingServer.shutdown();
         }
 
+        if (this.fileWatchService != null) {
+            this.fileWatchService.shutdown();
+        }
+
         if (this.messageStore != null) {
             this.messageStore.shutdown();
         }
@@ -643,6 +709,10 @@ public class BrokerController {
             this.fastRemotingServer.start();
         }
 
+        if (this.fileWatchService != null) {
+            this.fileWatchService.start();
+        }
+
         if (this.brokerOuterAPI != null) {
             this.brokerOuterAPI.start();
         }
@@ -659,14 +729,14 @@ public class BrokerController {
             this.filterServerManager.start();
         }
 
-        this.registerBrokerAll(true, false);
+        this.registerBrokerAll(true, false, true);
 
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
             public void run() {
                 try {
-                    BrokerController.this.registerBrokerAll(true, false);
+                    BrokerController.this.registerBrokerAll(true, false, brokerConfig.isForceRegister());
                 } catch (Throwable e) {
                     log.error("registerBrokerAll Exception", e);
                 }
@@ -682,7 +752,7 @@ public class BrokerController {
         }
     }
 
-    public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway) {
+    public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway, boolean forceRegister) {
         TopicConfigSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildTopicConfigSerializeWrapper();
 
         if (!PermName.isWriteable(this.getBrokerConfig().getBrokerPermission())
@@ -697,28 +767,56 @@ public class BrokerController {
             topicConfigWrapper.setTopicConfigTable(topicConfigTable);
         }
 
-        RegisterBrokerResult registerBrokerResult = this.brokerOuterAPI.registerBrokerAll(
-            this.brokerConfig.getBrokerClusterName(),
+        if (forceRegister || needRegister(this.brokerConfig.getBrokerClusterName(),
             this.getBrokerAddr(),
             this.brokerConfig.getBrokerName(),
             this.brokerConfig.getBrokerId(),
-            this.getHAServerAddr(),
-            topicConfigWrapper,
-            this.filterServerManager.buildNewFilterServerList(),
-            oneway,
-            this.brokerConfig.getRegisterBrokerTimeoutMills());
+            this.brokerConfig.getRegisterBrokerTimeoutMills())) {
+            List<RegisterBrokerResult> registerBrokerResultList = this.brokerOuterAPI.registerBrokerAll(
+                this.brokerConfig.getBrokerClusterName(),
+                this.getBrokerAddr(),
+                this.brokerConfig.getBrokerName(),
+                this.brokerConfig.getBrokerId(),
+                this.getHAServerAddr(),
+                topicConfigWrapper,
+                this.filterServerManager.buildNewFilterServerList(),
+                oneway,
+                this.brokerConfig.getRegisterBrokerTimeoutMills(),
+                this.brokerConfig.isCompressedRegister());
 
-        if (registerBrokerResult != null) {
-            if (this.updateMasterHAServerAddrPeriodically && registerBrokerResult.getHaServerAddr() != null) {
-                this.messageStore.updateHaMasterAddress(registerBrokerResult.getHaServerAddr());
-            }
+            if (registerBrokerResultList.size() > 0) {
+                RegisterBrokerResult registerBrokerResult = registerBrokerResultList.get(0);
+                if (registerBrokerResult != null) {
+                    if (this.updateMasterHAServerAddrPeriodically && registerBrokerResult.getHaServerAddr() != null) {
+                        this.messageStore.updateHaMasterAddress(registerBrokerResult.getHaServerAddr());
+                    }
 
-            this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
+                    this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
 
-            if (checkOrderConfig) {
-                this.getTopicConfigManager().updateOrderTopicConfig(registerBrokerResult.getKvTable());
+                    if (checkOrderConfig) {
+                        this.getTopicConfigManager().updateOrderTopicConfig(registerBrokerResult.getKvTable());
+                    }
+                }
             }
         }
+    }
+
+    private boolean needRegister(final String clusterName,
+        final String brokerAddr,
+        final String brokerName,
+        final long brokerId,
+        final int timeoutMills) {
+
+        TopicConfigSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildTopicConfigSerializeWrapper();
+        List<Boolean> changeList = brokerOuterAPI.needRegister(clusterName, brokerAddr, brokerName, brokerId, topicConfigWrapper, timeoutMills);
+        boolean needRegister = false;
+        for (Boolean changed : changeList) {
+            if (changed) {
+                needRegister = true;
+                break;
+            }
+        }
+        return needRegister;
     }
 
     public TopicConfigManager getTopicConfigManager() {

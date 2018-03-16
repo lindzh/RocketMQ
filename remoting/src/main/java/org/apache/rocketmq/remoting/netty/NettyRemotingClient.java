@@ -34,6 +34,7 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
+import java.io.IOException;
 import java.net.SocketAddress;
 import java.security.cert.CertificateException;
 import java.util.Collections;
@@ -52,7 +53,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import javax.net.ssl.SSLException;
 import org.apache.rocketmq.remoting.ChannelEventListener;
 import org.apache.rocketmq.remoting.InvokeCallback;
 import org.apache.rocketmq.remoting.RPCHook;
@@ -64,12 +64,12 @@ import org.apache.rocketmq.remoting.exception.RemotingConnectException;
 import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class NettyRemotingClient extends NettyRemotingAbstract implements RemotingClient {
-    private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
+    private static final InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
 
     private static final long LOCK_TIMEOUT_MILLIS = 3000;
 
@@ -87,6 +87,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final Lock lockNamesrvChannel = new ReentrantLock();
 
     private final ExecutorService publicExecutor;
+
+    /**
+     * Invoke the callback methods in this executor when process response.
+     */
+    private ExecutorService callbackExecutor;
     private final ChannelEventListener channelEventListener;
     private DefaultEventExecutorGroup defaultEventExecutorGroup;
     private RPCHook rpcHook;
@@ -126,9 +131,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
         if (nettyClientConfig.isUseTLS()) {
             try {
-                sslContext = SslHelper.buildSslContext(true);
+                sslContext = TlsHelper.buildSslContext(true);
                 log.info("SSL enabled for client");
-            } catch (SSLException e) {
+            } catch (IOException e) {
                 log.error("Failed to create SSLContext", e);
             } catch (CertificateException e) {
                 log.error("Failed to create SSLContext", e);
@@ -582,7 +587,12 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     @Override
     public ExecutorService getCallbackExecutor() {
-        return this.publicExecutor;
+        return callbackExecutor != null ? callbackExecutor : publicExecutor;
+    }
+
+    @Override
+    public void setCallbackExecutor(final ExecutorService callbackExecutor) {
+        this.callbackExecutor = callbackExecutor;
     }
 
     static class ChannelWrapper {

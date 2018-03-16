@@ -45,17 +45,17 @@ import org.apache.rocketmq.remoting.common.ServiceThread;
 import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public abstract class NettyRemotingAbstract {
 
     /**
      * Remoting logger instance.
      */
-    private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
+    private static final InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
 
     /**
      * Semaphore to limit maximum number of on-going one-way requests, which protects system memory footprint.
@@ -93,7 +93,11 @@ public abstract class NettyRemotingAbstract {
     /**
      * SSL context via which to create {@link SslHandler}.
      */
-    protected SslContext sslContext;
+    protected volatile SslContext sslContext;
+
+    static {
+        NettyLogger.initNettyLogger();
+    }
 
     /**
      * Constructor, specifying capacity of one-way and asynchronous semaphores.
@@ -257,14 +261,13 @@ public abstract class NettyRemotingAbstract {
         if (responseFuture != null) {
             responseFuture.setResponseCommand(cmd);
 
-            responseFuture.release();
-
             responseTable.remove(opaque);
 
             if (responseFuture.getInvokeCallback() != null) {
                 executeInvokeCallback(responseFuture);
             } else {
                 responseFuture.putResponse(cmd);
+                responseFuture.release();
             }
         } else {
             log.warn("receive response, but not matched any request, " + RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
@@ -287,6 +290,8 @@ public abstract class NettyRemotingAbstract {
                             responseFuture.executeInvokeCallback();
                         } catch (Throwable e) {
                             log.warn("execute callback in executor exception, and callback throw", e);
+                        } finally {
+                            responseFuture.release();
                         }
                     }
                 });
@@ -303,6 +308,8 @@ public abstract class NettyRemotingAbstract {
                 responseFuture.executeInvokeCallback();
             } catch (Throwable e) {
                 log.warn("executeInvokeCallback Exception", e);
+            } finally {
+                responseFuture.release();
             }
         }
     }

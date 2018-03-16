@@ -30,13 +30,13 @@ import org.apache.commons.cli.PosixParser;
 import org.apache.rocketmq.common.MQVersion;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.common.namesrv.NamesrvConfig;
 import org.apache.rocketmq.remoting.netty.NettyServerConfig;
-import org.apache.rocketmq.remoting.netty.NettySystemConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.srvutil.ServerUtil;
 import org.apache.rocketmq.srvutil.ShutdownHookThread;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class NamesrvStartup {
@@ -49,15 +49,6 @@ public class NamesrvStartup {
 
     public static NamesrvController main0(String[] args) {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
-
-        if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_SNDBUF_SIZE)) {
-            NettySystemConfig.socketSndbufSize = 4096;
-        }
-
-        if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_RCVBUF_SIZE)) {
-            NettySystemConfig.socketRcvbufSize = 4096;
-        }
-
         try {
             //PackageConflictDetect.detectFastjson();
 
@@ -82,7 +73,7 @@ public class NamesrvStartup {
 
                     namesrvConfig.setConfigStorePath(file);
 
-                    System.out.printf("load config properties file OK, " + file + "%n");
+                    System.out.printf("load config properties file OK, %s%n", file);
                     in.close();
                 }
             }
@@ -105,7 +96,7 @@ public class NamesrvStartup {
             configurator.setContext(lc);
             lc.reset();
             configurator.doConfigure(namesrvConfig.getRocketmqHome() + "/conf/logback_namesrv.xml");
-            final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
+            final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
             MixAll.printObjectProperties(log, namesrvConfig);
             MixAll.printObjectProperties(log, nettyServerConfig);
@@ -133,7 +124,7 @@ public class NamesrvStartup {
 
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
             log.info(tip);
-            System.out.printf(tip + "%n");
+            System.out.printf("%s%n", tip);
 
             return controller;
         } catch (Throwable e) {
