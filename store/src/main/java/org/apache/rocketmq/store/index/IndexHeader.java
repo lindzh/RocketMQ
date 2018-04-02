@@ -19,7 +19,6 @@ package org.apache.rocketmq.store.index;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import net.smacke.jaydio.DirectRandomAccessFile;

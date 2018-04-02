@@ -52,11 +52,11 @@ public class IndexFile {
             }
             indexFile.createNewFile();
 
-            RandomAccessFile accessFile = new RandomAccessFile(fileName,"rw");
+            RandomAccessFile accessFile = new RandomAccessFile(fileName, "rw");
             accessFile.setLength(fileTotalSize);
             accessFile.close();
         }
-        this.randomAccessFile = new DirectRandomAccessFile(fileName,"rwo");
+        this.randomAccessFile = new DirectRandomAccessFile(fileName, "rw");
         this.hashSlotNum = hashSlotNum;
         this.indexNum = indexNum;
 
@@ -144,7 +144,7 @@ public class IndexFile {
 
                 dos.writeInt(keyHash);
                 dos.writeLong(phyOffset);
-                dos.writeInt((int)timeDiff);
+                dos.writeInt((int) timeDiff);
                 dos.writeInt(slotValue);
 
                 randomAccessFile.seek(absIndexPos);
@@ -166,7 +166,7 @@ public class IndexFile {
             } catch (Exception e) {
                 log.error("putKey exception, Key: " + key + " KeyHashCode: " + key.hashCode(), e);
             } finally {
-                if(locked){
+                if (locked) {
                     lock.unlock();
                 }
             }
@@ -229,7 +229,6 @@ public class IndexFile {
                         IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * hashSlotSize
                             + nextIndexToRead * indexSize;
 
-
                     randomAccessFile.seek(absIndexPos);
                     int keyHashRead = randomAccessFile.readInt();
                     long phyOffsetRead = randomAccessFile.readLong();
@@ -261,7 +260,7 @@ public class IndexFile {
         } catch (Exception e) {
             log.error("selectPhyOffset exception ", e);
         } finally {
-            if(locked){
+            if (locked) {
                 this.lock.unlock();
             }
         }
