@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import net.smacke.jaydio.DirectRandomAccessFile;
 
 /**
  * Index hdeader protocol is as below
@@ -35,7 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class IndexHeader {
     public static final int INDEX_HEADER_SIZE = 40;
     private static int beginTimestampIndex = 0;
-    private final RandomAccessFile randomAccessFile;
+    private final DirectRandomAccessFile randomAccessFile;
     private AtomicLong beginTimestamp = new AtomicLong(0);
     private AtomicLong endTimestamp = new AtomicLong(0);
     private AtomicLong beginPhyOffset = new AtomicLong(0);
@@ -44,7 +45,7 @@ public class IndexHeader {
 
     private AtomicInteger indexCount = new AtomicInteger(1);
 
-    public IndexHeader(RandomAccessFile randomAccessFile) {
+    public IndexHeader(DirectRandomAccessFile randomAccessFile) {
         this.randomAccessFile = randomAccessFile;
     }
 

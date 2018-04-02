@@ -21,8 +21,9 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.channels.FileLock;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
+import net.smacke.jaydio.DirectRandomAccessFile;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
@@ -35,8 +36,9 @@ public class IndexFile {
     private final int hashSlotNum;
     private final int indexNum;
     private String fileName;
-    private final RandomAccessFile randomAccessFile;
+    private final DirectRandomAccessFile randomAccessFile;
     private final IndexHeader indexHeader;
+    private final ReentrantLock lock = new ReentrantLock();
 
     public IndexFile(final String fileName, final int hashSlotNum, final int indexNum,
         final long endPhyOffset, final long endTimestamp) throws IOException {
@@ -49,10 +51,12 @@ public class IndexFile {
                 parentFile.mkdirs();
             }
             indexFile.createNewFile();
-        }
-        this.randomAccessFile = new RandomAccessFile(fileName,"rw");
-        this.randomAccessFile.setLength(fileTotalSize);
 
+            RandomAccessFile accessFile = new RandomAccessFile(fileName,"rw");
+            accessFile.setLength(fileTotalSize);
+            accessFile.close();
+        }
+        this.randomAccessFile = new DirectRandomAccessFile(fileName,"rwo");
         this.hashSlotNum = hashSlotNum;
         this.indexNum = indexNum;
 
@@ -108,10 +112,10 @@ public class IndexFile {
             int slotPos = keyHash % this.hashSlotNum;
             int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;
 
-            FileLock fileLock = null;
-
+            boolean locked = false;
             try {
-                fileLock = randomAccessFile.getChannel().lock();
+                lock.lock();
+                locked = true;
                 randomAccessFile.seek(absSlotPos);
                 int slotValue = randomAccessFile.readInt();
 
@@ -162,12 +166,8 @@ public class IndexFile {
             } catch (Exception e) {
                 log.error("putKey exception, Key: " + key + " KeyHashCode: " + key.hashCode(), e);
             } finally {
-                if (fileLock != null) {
-                    try {
-                        fileLock.release();
-                    } catch (IOException e) {
-                        log.error("Failed to release the lock", e);
-                    }
+                if(locked){
+                    lock.unlock();
                 }
             }
         } else {
@@ -211,10 +211,10 @@ public class IndexFile {
         int slotPos = keyHash % this.hashSlotNum;
         int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;
 
-        FileLock fileLock = null;
+        boolean locked = false;
         try {
-            fileLock = randomAccessFile.getChannel().lock();
-
+            this.lock.lock();
+            locked = true;
             randomAccessFile.seek(absSlotPos);
             int slotValue = randomAccessFile.readInt();
             if (slotValue <= invalidIndex || slotValue > this.indexHeader.getIndexCount()
@@ -261,12 +261,8 @@ public class IndexFile {
         } catch (Exception e) {
             log.error("selectPhyOffset exception ", e);
         } finally {
-            if (fileLock != null) {
-                try {
-                    fileLock.release();
-                } catch (IOException e) {
-                    log.error("Failed to release the lock", e);
-                }
+            if(locked){
+                this.lock.unlock();
             }
         }
     }

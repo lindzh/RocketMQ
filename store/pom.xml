@@ -37,6 +37,11 @@
             <artifactId>jna</artifactId>
         </dependency>
         <dependency>
+            <groupId>net.smacke</groupId>
+            <artifactId>jaydio</artifactId>
+            <version>0.1</version>
+        </dependency>
+        <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <scope>test</scope>
